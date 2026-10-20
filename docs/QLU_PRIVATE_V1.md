@@ -115,9 +115,12 @@ policies, algorithms, duplicate keys, and oversized payloads are rejected, not g
   reads rejected. Secrets are not command arguments, node RPC parameters, or console output.
   The signing helper accepts bounded JSON on stdin and emits only public keys/signatures.
 
-A live prototype wallet file contains its seed in plaintext with restrictive permissions;
-only the backup is encrypted. Python cannot guarantee secret-memory erasure. There is no
-hardware-backed key store, production account-discovery UI, or guardian recovery yet. Store
+The older protocol fixtures contain disposable plaintext wallet files with restrictive
+permissions. The new [encrypted wallet foundation](SECURE_WALLET.md) encrypts the working
+wallet with a separate passphrase and provides lock/unlock and guided backup/recovery;
+the portable backup format above is unchanged. Python cannot guarantee secret-memory
+erasure. There is no hardware-backed key store, production account-discovery UI, or
+guardian recovery yet. Store
 backup copies safely and the recovery code on separate offline storage. Different folders on
 one computer are not offline separation. The automated drill colocates disposable test
 materials for reproducibility and must not be presented as production custody guidance.

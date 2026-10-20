@@ -12,6 +12,7 @@ A fresh, payments-first blockchain project by VibexHQ, with an optional develope
 - [Build and private-network guide](docs/FOUNDATION.md)
 - [Current verification and next work](docs/STATUS.md)
 - [Measured private-network performance](docs/PERFORMANCE.md)
+- [Encrypted wallet and guided recovery](docs/SECURE_WALLET.md)
 - [MacBook recovery test](docs/MACBOOK_RECOVERY.md)
 - [Cross-platform recovery release gate](docs/RECOVERY_RELEASE_GATE.md)
 - [Pinned upstream provenance](qlu/upstream.json)
@@ -28,12 +29,17 @@ python3 -m venv .local/recovery-venv
 .local/recovery-venv/bin/python -m pip install --require-hashes --only-binary=:all: -r qlu/recovery-requirements.txt
 .local/recovery-venv/bin/python -m unittest discover -s qlu/tests -v
 .local/recovery-venv/bin/python qlu/private_net.py smoke
+.local/recovery-venv/bin/python qlu/wallet_smoke.py
 python3 qlu/devnet.py smoke
 ```
 
 The QLU smoke test checks separate identity, both signatures, adversarial transactions and directly submitted blocks, network replay rejection, recovery after deleting the original test wallet, a restored-key payment, restart, and cleanup. The second smoke command separately checks the preserved upstream baseline. Use `setup`, `start`, `status`, and `stop` for manual laboratory operation. No existing wallet folders or previous q-chain projects are used.
 
 Local node data, wallets, credentials, and test evidence are ignored under `.local/`. Do not publish them. The node's privileged RPC must never be exposed as a public cloud API.
+
+For the guided encrypted-wallet flow, run `.local/recovery-venv/bin/python qlu/wallet.py`
+yourself in a local terminal. Keep its passphrase and recovery code out of chat and logs.
+This interface is private development tooling, not the consumer wallet app.
 
 ## Engineering direction
 

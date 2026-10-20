@@ -3,8 +3,27 @@
 Date: 2026-10-19 (America/Chicago; verification timestamps continue into 2026-10-20 UTC).
 
 **Implemented and locally verified:** separate QLU development identity, mandatory ML-DSA-65
-AND Schnorr spending, encrypted recovery, and restored-key spending on four loopback nodes.
+AND Schnorr spending, encrypted working-wallet storage and recovery, and restored-key
+spending on four loopback nodes.
 Test coins have no value. Both laboratory networks are stopped after tests.
+
+The [encrypted wallet foundation](SECURE_WALLET.md) now passes locally: separate
+daily passphrase and offline recovery code, encrypted vault creation/restoration,
+explicit and idle locking, and guided backup verification. **162 Python tests
+passed** (106 earlier tests plus 26 vault, 25 interface, and 5 worker-boundary
+tests). A fresh four-node drill passed all eight checks: a funded encrypted
+wallet rejected locked signing, its original vault was removed, a new process
+restored directly to an encrypted vault, and the recovered keys rediscovered
+their output and sent 0.999 test QLU with both signatures. That payment survived
+all four nodes restarting, and all nodes stopped afterward.
+
+This new drill is on one physical Mac. It does not repeat the separate MacBook
+trial or complete cross-platform wallet acceptance. The guided interface is a
+terminal tool; there is no consumer app or hardware-backed key store yet.
+Three issues caught during implementation were corrected and regression-tested:
+publication inode checking, command-line error redaction, and nonseekable terminal
+stream handling. Separate agent review found no remaining blocker for this
+private milestone; that is not a specialist security audit.
 
 Follow-on milestone: [performance baseline](PERFORMANCE.md) now passes locally,
 including an actually connected 256-authorization block and a fresh-process
@@ -15,7 +34,7 @@ Physical-device identity is user-attested; the disclosed disposable code makes
 this an interoperability result, not proof of secret custody.
 Recovery across Mac, native Windows, Linux, iPhone, and Android is now a mandatory
 [release gate](RECOVERY_RELEASE_GATE.md), not an existing support claim.
-The follow-on Python suite passes 106 tests, covering the prior behavior plus the
+At that earlier milestone the Python suite passed 106 tests, covering prior behavior plus the
 offline challenge, coordinator, shared port lock and source-kit integrity. The
 extracted MacBook source kit also builds locally and passes its native self-test
 and 46 packaged recovery tests. The user also reports a passing native build/self-test
@@ -75,6 +94,15 @@ node/keytool hashes and current reports. Main reports are `qlu-private-latest.js
 `devnet-smoke.json`, `provider-startup-negative.json`, and `python-tests-private.log`.
 CTest XML is `build/qlu-foundation/qlu-ctest.xml`. No private wallet/code/cookie files are committed.
 
+Encrypted-wallet evidence: `.local/evidence/python-tests-encrypted-wallet.log`,
+`wallet-latest.json`, and `verification-summary-wallet.json`. The confirmed
+payment is `b41cdda993ee5c06f2d4273b4ff00abb6c0d856033b6543320bed508e8c0ed3c`,
+in block `6e19151a90b6bbba1c01dadf7541a2bf705f2aabe878a766258ea717480639f9`.
+The private run `339af969141e46b683bc0b39f50914ae` completed at
+2026-10-20 02:56:07 UTC (October 19 in Chicago). Its report records source and
+binary fingerprints. Retained wallet and backup files from this drill are
+encrypted; passphrases and recovery codes were not saved.
+
 Development failures were retained and corrected: missing OpenSSL test include propagation
 and CMake target scope, a narrowed integer in a test fixture, and a block-rejection test that
 encountered already-processed peer headers. Each node now receives a distinct solved invalid
@@ -86,17 +114,19 @@ existed, and the final test checks no chain files or RPC cookies instead.
 
 - Single-key signing and recovery prototype; no HD rotation, contact UI, hardware-backed live
   keys, automatic consumer recovery flow or production account discovery service.
-- Live wallet files contain plaintext seeds protected by mode 0600; backups use AES-256-GCM.
-  Python cannot guarantee secret-memory erasure. Restoration does not revoke stolen key copies.
+- New working wallets use passphrase-encrypted vaults; historical protocol fixtures
+  still use disposable plaintext seed files. Python cannot guarantee secret-memory
+  erasure. Restoration does not revoke stolen key copies.
 - No RandomX, production issuance/difficulty rules, public testnet/mainnet or paid cloud API.
 - No sustained hostile-network/fuzzing/sanitizer runs, full upstream Python functional suite,
   full cross-platform recovery matrix, cross-implementation signature verification, mobile measurements,
   reproducible signed release or independent specialist security audit yet.
-- CI workflow now builds the required OpenSSL on Linux, checks dependency selection, and tests
-  both networks plus recovery. It has been syntax checked, not run on hosted CI.
+- CI builds the required OpenSSL on Linux and verifies dependency selection before
+  Python tests that need the native signer. It also includes the encrypted-wallet
+  private-network drill. It has not been run on hosted CI.
 - Host macOS 27 / selected SDK 26.5; locally installed OpenSSL/libevent target macOS 27 and
   generate linker warnings. Local success does not demonstrate compatibility with older Macs.
 
 Next: harden and broaden the measured protocol, test independent implementations and the remaining platforms,
-then design HD/live-key storage and RandomX/economics as separately reviewed milestones.
+then design HD rotation, hardware-backed custody and RandomX/economics as separately reviewed milestones.
 The [historical stage-0 report](STATUS-FOUNDATION.md) preserves the earlier foundation evidence.

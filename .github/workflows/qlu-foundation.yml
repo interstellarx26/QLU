@@ -109,8 +109,6 @@ jobs:
           pathlib.Path(".local/evidence/ci-dependencies.json").write_text(json.dumps(record, indent=2) + "\n")
           print(json.dumps(record, indent=2))
           PY
-      - name: Test controller safety and recovery
-        run: python3 -m unittest discover -s qlu/tests -v
       - name: Build the pinned source
         run: python3 qlu/build.py build --jobs 2
       - name: Check the selected OpenSSL library
@@ -126,12 +124,16 @@ jobs:
                   raise SystemExit(f"CMake did not select the intended {name}")
               print(name + "=" + entries[0])
           PY
+      - name: Test controller safety, recovery, and encrypted wallets
+        run: python3 -m unittest discover -s qlu/tests -v
       - name: Run registered upstream and QLU tests
         run: python3 qlu/build.py test --jobs 2
       - name: Exercise four upstream regression-test nodes
         run: python3 qlu/devnet.py smoke
       - name: Exercise QLU identity, hybrid spending, and recovery
         run: python3 qlu/private_net.py smoke
+      - name: Exercise encrypted-wallet recovery and confirmed spending
+        run: python3 qlu/wallet_smoke.py
       - name: Stop only the upstream laboratory's nodes
         if: always()
         run: python3 qlu/devnet.py stop

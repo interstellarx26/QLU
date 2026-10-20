@@ -71,7 +71,17 @@ listener/peer is loopback in this controller. The Bitcoin wallet RPC is disabled
 `qlu-keytool` and the prototype Python tools provide its distinct signing path. Raw node RPC
 remains privileged local administration, not Developer Cloud.
 
-Recovery CLI:
+The new encrypted-wallet interface provides guided creation, backup verification,
+locking, unlocking, and restoration. Run it yourself in a local terminal; never
+enter passphrases or recovery codes into chat:
+
+```sh
+.local/recovery-venv/bin/python qlu/wallet.py
+```
+
+See [encrypted-wallet rules and limits](SECURE_WALLET.md). The default vault is
+under ignored `.local/wallet/`. The older low-level recovery fixture CLI remains
+available for historical protocol drills:
 
 ```sh
 .local/recovery-venv/bin/python qlu/recovery.py --help
@@ -82,16 +92,19 @@ Recovery CLI:
 
 Use private directories outside the old projects. Backup and offline-code files must be in
 separate directories; for actual offline separation move the code to separate offline storage.
-A prototype live wallet is a plaintext seed file protected by filesystem permissions. Never
-use these development tools for real funds. The automated drill deletes only its own newly
-created original wallet, then restores a new wallet in a separate process and spends normally.
-It does not test a second physical device.
+That older CLI creates plaintext seed files protected by filesystem permissions;
+the new wallet interface encrypts working wallets. Never use these development tools
+for real funds. `qlu/wallet_smoke.py` creates only disposable encrypted wallets,
+removes its own original vault, restores directly into a new encrypted vault in a
+separate process, and confirms a payment. It does not test a second physical device.
 
 ## Next implementation steps
 
 1. Harden and benchmark the private hybrid construction: cross-implementation vectors, fuzzing,
-   resource pricing, mobile measurements, failure injection and a genuine second-device recovery.
-2. Design HD/address rotation and secure live-key storage before a consumer wallet.
+   resource pricing, mobile measurements, failure injection and the remaining recovery platforms.
+2. Broaden encrypted-wallet acceptance across devices, then design HD/address rotation and
+   hardware-backed storage before a consumer wallet. The first physical MacBook portable-backup
+   trial passed; the new live-wallet implementation needs its own device acceptance.
 3. Integrate identified RandomX code and difficulty/issuance rules as separately reviewed changes.
 4. Add contact UX and Developer Cloud; independent public-testnet/security review before release.
 

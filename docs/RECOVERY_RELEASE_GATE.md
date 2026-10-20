@@ -79,3 +79,12 @@ peak memory and the rest of the platform matrix also remain outstanding.
 A same-computer rehearsal remains a rehearsal even if its operator-mode field
 says `physical-device`. This first trial does not complete the release gate or
 establish production security.
+
+## Encrypted working-wallet follow-on
+
+The [secure wallet foundation](SECURE_WALLET.md) adds passphrase-encrypted local
+storage, lock/unlock, and a guided terminal flow while retaining the same portable
+backup. Its same-Mac fresh-process drill is a separate result. The first MacBook
+trial above does not test this new vault or interface. Repeat physical-device
+acceptance with newly generated materials, including lock/idle behavior, backup
+readback, direct encrypted restoration, and platform storage protections.
