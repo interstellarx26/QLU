@@ -21,7 +21,15 @@ jobs:
       matrix:
         os: [ubuntu-24.04, macos-14]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      QLU_OPENSSL_VERSION: 3.6.4
+      # Official release checksum, linked from https://www.openssl-library.org/source/old/3.6/
+      # https://github.com/openssl/openssl/releases/download/openssl-3.6.4/openssl-3.6.4.tar.gz.sha256
+      QLU_OPENSSL_SHA256: 9bffaa1ad1e07b354c21bd3324ec02fa15579f45a7d0494b3e74bc449b7333ef
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -31,18 +39,102 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake pkgconf python3 libboost-dev libevent-dev libsqlite3-dev
+          sudo apt-get install -y build-essential cmake pkgconf python3 python3-venv perl curl libboost-dev libevent-dev libsqlite3-dev
+      - name: Build verified OpenSSL source on Linux
+        if: runner.os == 'Linux'
+        run: |
+          openssl_archive="${RUNNER_TEMP}/openssl-${QLU_OPENSSL_VERSION}.tar.gz"
+          openssl_prefix="${RUNNER_TEMP}/qlu-openssl"
+          curl --fail --location --retry 3 --proto '=https' --tlsv1.2 \
+            "https://github.com/openssl/openssl/releases/download/openssl-${QLU_OPENSSL_VERSION}/openssl-${QLU_OPENSSL_VERSION}.tar.gz" \
+            --output "${openssl_archive}"
+          python3 - "${openssl_archive}" <<'PY'
+          import hashlib
+          import os
+          import pathlib
+          import sys
+          actual = hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest()
+          if actual != os.environ["QLU_OPENSSL_SHA256"]:
+              raise SystemExit("OpenSSL archive checksum mismatch")
+          print("Verified OpenSSL source SHA256:", actual)
+          PY
+          tar -xzf "${openssl_archive}" -C "${RUNNER_TEMP}"
+          cd "${RUNNER_TEMP}/openssl-${QLU_OPENSSL_VERSION}"
+          ./Configure --prefix="${openssl_prefix}" --openssldir="${openssl_prefix}/ssl" --libdir=lib no-shared no-tests
+          make -j2
+          make install_sw
+          echo "OPENSSL_ROOT_DIR=${openssl_prefix}" >> "${GITHUB_ENV}"
+          echo "CMAKE_PREFIX_PATH=${openssl_prefix}" >> "${GITHUB_ENV}"
       - name: Install macOS build dependencies
         if: runner.os == 'macOS'
-        run: brew install cmake boost pkgconf libevent
-      - name: Test controller safety
+        run: |
+          brew install cmake boost pkgconf libevent openssl@3 python@3.12
+          echo "OPENSSL_ROOT_DIR=$(brew --prefix openssl@3)" >> "${GITHUB_ENV}"
+          echo "$(brew --prefix python@3.12)/libexec/bin" >> "${GITHUB_PATH}"
+      - name: Create isolated recovery environment
+        run: |
+          umask 077
+          mkdir -p .local/evidence
+          python3 -m venv .local/ci-venv
+          .local/ci-venv/bin/python -m pip install --disable-pip-version-check --require-hashes --only-binary=:all: -r qlu/recovery-requirements.txt
+          .local/ci-venv/bin/python -m pip check
+          echo "${GITHUB_WORKSPACE}/.local/ci-venv/bin" >> "${GITHUB_PATH}"
+      - name: Verify and record cryptographic dependencies
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import platform
+          import re
+          import subprocess
+          import cryptography
+          from cryptography.hazmat.backends.openssl.backend import backend
+          executable = pathlib.Path(os.environ["OPENSSL_ROOT_DIR"]) / "bin/openssl"
+          version = subprocess.check_output([str(executable), "version"], text=True).strip()
+          match = re.match(r"OpenSSL (\d+)\.(\d+)\.(\d+)", version)
+          if not match or tuple(map(int, match.groups())) < (3, 5, 0):
+              raise SystemExit("OpenSSL >= 3.5 is required for ML-DSA")
+          algorithms = subprocess.check_output([str(executable), "list", "-signature-algorithms"], text=True)
+          if "ML-DSA-65" not in algorithms:
+              raise SystemExit("OpenSSL ML-DSA-65 implementation is unavailable")
+          record = {
+              "platform": platform.platform(), "node_openssl": version,
+              "node_openssl_prefix": os.environ["OPENSSL_ROOT_DIR"],
+              "node_openssl_source_sha256": os.environ["QLU_OPENSSL_SHA256"] if platform.system() == "Linux" else None,
+              "macos_dependency_policy": "Homebrew openssl@3; version recorded, not source-pinned",
+              "cryptography": cryptography.__version__,
+              "recovery_openssl": backend.openssl_version_text(),
+          }
+          pathlib.Path(".local/evidence/ci-dependencies.json").write_text(json.dumps(record, indent=2) + "\n")
+          print(json.dumps(record, indent=2))
+          PY
+      - name: Test controller safety and recovery
         run: python3 -m unittest discover -s qlu/tests -v
       - name: Build the pinned source
         run: python3 qlu/build.py build --jobs 2
-      - name: Run registered upstream tests
+      - name: Check the selected OpenSSL library
+        run: |
+          python3 - <<'PY'
+          import os
+          import pathlib
+          cache = pathlib.Path("build/qlu-foundation/CMakeCache.txt").read_text().splitlines()
+          prefix = pathlib.Path(os.environ["OPENSSL_ROOT_DIR"]).resolve()
+          for name in ("OPENSSL_INCLUDE_DIR", "OPENSSL_CRYPTO_LIBRARY"):
+              entries = [line.split("=", 1)[1] for line in cache if line.startswith(name + ":")]
+              if len(entries) != 1 or not pathlib.Path(entries[0]).resolve().is_relative_to(prefix):
+                  raise SystemExit(f"CMake did not select the intended {name}")
+              print(name + "=" + entries[0])
+          PY
+      - name: Run registered upstream and QLU tests
         run: python3 qlu/build.py test --jobs 2
-      - name: Exercise four private nodes
+      - name: Exercise four upstream regression-test nodes
         run: python3 qlu/devnet.py smoke
-      - name: Stop only this laboratory's nodes
+      - name: Exercise QLU identity, hybrid spending, and recovery
+        run: python3 qlu/private_net.py smoke
+      - name: Stop only the upstream laboratory's nodes
         if: always()
         run: python3 qlu/devnet.py stop
+      - name: Stop only the QLU laboratory's nodes
+        if: always()
+        run: python3 qlu/private_net.py stop

@@ -1,14 +1,14 @@
 # QLU v1 blueprint
 
-Status: accepted product direction; implementation starts with a private laboratory.
+Status: accepted product direction; implementation is in a private laboratory; current protocol is [QLU private v1](QLU_PRIVATE_V1.md).
 
 **Purpose:** Make everyday payments simple, protect ownership with quantum-resistant authorization, and make mining accessible through ordinary computers. VibexHQ builds infrastructure businesses can choose to pay for.
 
 | Decision | Direction |
 | --- | --- |
-| Foundation | Begin with a pinned [Bitcoin Core](https://github.com/bitcoin/bitcoin) release. The initial four-node laboratory runs upstream regression-test rules; it is not yet a QLU consensus implementation. |
+| Foundation | Begin with a pinned [Bitcoin Core](https://github.com/bitcoin/bitcoin) release. Preserve the original four-node upstream baseline and a separate QLU private development chain. See current protocol and status for implemented scope. |
 | First product | Native payments and a simple self-custody wallet. Select a verified contact, enter an amount, review the recipient and fee, then send. Show pending and confirmed states. General-purpose smart contracts are outside v1. |
-| Quantum resistance | Integrate [NIST-standardized ML-DSA](https://csrc.nist.gov/pubs/fips/204/final) in an isolated, reviewed stage. Require quantum-resistant authorization for spending and recovery before a QLU launch. Choose parameters after benchmarking; review address commitments and all alternate spending paths. The initial laboratory has no such protection. |
+| Quantum resistance | Integrate [NIST-standardized ML-DSA](https://csrc.nist.gov/pubs/fips/204/final) in an isolated, reviewed stage. Require quantum-resistant authorization for spending and recovery before a QLU launch. Choose parameters after benchmarking; review address commitments and all alternate spending paths. The separate QLU private v1 prototype now requires ML-DSA-65 AND Schnorr for every spend; parameter choice remains provisional until benchmarking and review. The preserved upstream laboratory has no such protection. |
 | Recovery | Encrypted wallet backup plus a separately stored offline recovery code, with a guided restore test. Define and test the backup format before release. VibexHQ cannot reset access or spend users' funds. Loss of all usable access and recovery material can permanently lose funds. Guardian recovery comes later, after specialist review. |
 | Mining and fair launch | Integrate [RandomX](https://github.com/tevador/RandomX) after the baseline is reproducible. No premine, presale, or reserved company allocation. Announce launch rules, code, and mining tools in advance; the team mines under identical rules. CPU accessibility does not equal equal rewards: hardware, electricity, and scale still matter. |
 | Issuance | Model predictable declining rewards with a small permanent mining reward. Supply, reward amounts, timing, fees, and difficulty rules remain explicit design decisions until measured and published. Laboratory coins have no monetary value. |

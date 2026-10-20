@@ -37,6 +37,8 @@ add_executable(test_bitcoin
   common_url_tests.cpp
   compress_tests.cpp
   crypto_tests.cpp
+  qlu_crypto_tests.cpp
+  qlu_consensus_tests.cpp
   cuckoocache_tests.cpp
   dbwrapper_tests.cpp
   denialofservice_tests.cpp
@@ -162,6 +164,8 @@ target_link_libraries(test_bitcoin
   test_util
   bitcoin_cli
   bitcoin_node
+  qlu_crypto
+  OpenSSL::Crypto
   bitcoin_consensus
   minisketch
   secp256k1

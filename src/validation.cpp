@@ -39,6 +39,7 @@
 #include <pow.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
+#include <qlu/consensus.h>
 #include <random.h>
 #include <script/script.h>
 #include <script/sigcache.h>
@@ -402,7 +403,7 @@ void Chainstate::MaybeUpdateMempoolForReorg(
 static bool CheckInputsFromMempoolAndCache(const CTransaction& tx, TxValidationState& state,
                 const CCoinsViewCache& view, const CTxMemPool& pool,
                 script_verify_flags flags, PrecomputedTransactionData& txdata, CCoinsViewCache& coins_tip,
-                ValidationCache& validation_cache)
+                ValidationCache& validation_cache, const Consensus::Params& consensus)
                 EXCLUSIVE_LOCKS_REQUIRED(cs_main, pool.cs)
 {
     AssertLockHeld(cs_main);
@@ -432,6 +433,8 @@ static bool CheckInputsFromMempoolAndCache(const CTransaction& tx, TxValidationS
             assert(coinFromUTXOSet.out == coin.out);
         }
     }
+
+    if (consensus.qlu_devnet) return qlu::CheckInputs(tx, state, view, consensus.hashGenesisBlock);
 
     // Call CheckInputScripts() to cache signature and script validity against current tip consensus rules.
     return CheckInputScripts(tx, state, view, flags, /* cacheSigStore= */ true, /* cacheFullScriptStore= */ true, txdata, validation_cache);
@@ -806,13 +809,15 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         return false; // state filled in by CheckTransaction
     }
 
+    if (m_active_chainstate.m_chainman.GetConsensus().qlu_devnet && !qlu::CheckTransactionShape(tx, state)) return false;
+
     // Coinbase is only valid in a block, not as a loose transaction
     if (tx.IsCoinBase())
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "coinbase");
 
     // Rather not work on nonstandard transactions (unless -testnet/-regtest)
     std::string reason;
-    if (m_pool.m_opts.require_standard && !IsStandardTx(tx, m_pool.m_opts.max_datacarrier_bytes, m_pool.m_opts.permit_bare_multisig, m_pool.m_opts.dust_relay_feerate, reason)) {
+    if (!m_active_chainstate.m_chainman.GetConsensus().qlu_devnet && m_pool.m_opts.require_standard && !IsStandardTx(tx, m_pool.m_opts.max_datacarrier_bytes, m_pool.m_opts.permit_bare_multisig, m_pool.m_opts.dust_relay_feerate, reason)) {
         return state.Invalid(TxValidationResult::TX_NOT_STANDARD, reason);
     }
 
@@ -900,16 +905,18 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         return false; // state filled in by CheckTxInputs
     }
 
-    if (m_pool.m_opts.require_standard && !AreInputsStandard(tx, m_view)) {
+    if (!m_active_chainstate.m_chainman.GetConsensus().qlu_devnet && m_pool.m_opts.require_standard && !AreInputsStandard(tx, m_view)) {
         return state.Invalid(TxValidationResult::TX_INPUTS_NOT_STANDARD, "bad-txns-nonstandard-inputs");
     }
 
     // Check for non-standard witnesses.
-    if (tx.HasWitness() && m_pool.m_opts.require_standard && !IsWitnessStandard(tx, m_view)) {
+    if (!m_active_chainstate.m_chainman.GetConsensus().qlu_devnet && tx.HasWitness() && m_pool.m_opts.require_standard && !IsWitnessStandard(tx, m_view)) {
         return state.Invalid(TxValidationResult::TX_WITNESS_MUTATED, "bad-witness-nonstandard");
     }
 
-    int64_t nSigOpsCost = GetTransactionSigOpCost(tx, m_view, STANDARD_SCRIPT_VERIFY_FLAGS);
+    int64_t nSigOpsCost = m_active_chainstate.m_chainman.GetConsensus().qlu_devnet
+        ? tx.vin.size() * (MAX_BLOCK_SIGOPS_COST / qlu::MAX_BLOCK_AUTHORIZATIONS)
+        : GetTransactionSigOpCost(tx, m_view, STANDARD_SCRIPT_VERIFY_FLAGS);
 
     // Keep track of transactions that spend a coinbase, which we re-scan
     // during reorgs to ensure COINBASE_MATURITY is still met.
@@ -1143,6 +1150,9 @@ bool MemPoolAccept::PolicyScriptChecks(const ATMPArgs& args, Workspace& ws)
     const CTransaction& tx = *ws.m_ptx;
     TxValidationState& state = ws.m_state;
 
+    const auto& consensus = m_active_chainstate.m_chainman.GetConsensus();
+    if (consensus.qlu_devnet) return qlu::CheckInputs(tx, state, m_view, consensus.hashGenesisBlock);
+
     constexpr script_verify_flags scriptVerifyFlags = STANDARD_SCRIPT_VERIFY_FLAGS;
 
     // Check input scripts and signatures.
@@ -1184,7 +1194,7 @@ bool MemPoolAccept::ConsensusScriptChecks(const ATMPArgs& args, Workspace& ws)
     // transactions into the mempool can be exploited as a DoS attack.
     script_verify_flags currentBlockScriptVerifyFlags{GetBlockScriptFlags(*m_active_chainstate.m_chain.Tip(), m_active_chainstate.m_chainman)};
     if (!CheckInputsFromMempoolAndCache(tx, state, m_view, m_pool, currentBlockScriptVerifyFlags,
-                                        ws.m_precomputed_txdata, m_active_chainstate.CoinsTip(), GetValidationCache())) {
+                                        ws.m_precomputed_txdata, m_active_chainstate.CoinsTip(), GetValidationCache(), m_active_chainstate.m_chainman.GetConsensus())) {
         LogError("BUG! PLEASE REPORT THIS! CheckInputScripts failed against latest-block but not STANDARD flags %s, %s", hash.ToString(), state.ToString());
         return Assume(false);
     }
@@ -2574,14 +2584,17 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
             break;
         }
 
-        if (!tx.IsCoinBase() && fScriptChecks)
+        // QLU never skips authorization through assumevalid or a Bitcoin script-cache entry.
+        if (!tx.IsCoinBase() && (fScriptChecks || params.GetConsensus().qlu_devnet))
         {
             bool fCacheResults = fJustCheck; /* Don't cache results if we're actually connecting blocks (still consult the cache, though) */
             bool tx_ok;
             TxValidationState tx_state;
             // If CheckInputScripts is called with a pointer to a checks vector, the resulting checks are appended to it. In that case
             // they need to be added to control which runs them asynchronously. Otherwise, CheckInputScripts runs the checks before returning.
-            if (control) {
+            if (params.GetConsensus().qlu_devnet) {
+                tx_ok = qlu::CheckInputs(tx, tx_state, view, params.GetConsensus().hashGenesisBlock);
+            } else if (control) {
                 std::vector<CScriptCheck> vChecks;
                 tx_ok = CheckInputScripts(tx, tx_state, view, flags, fCacheResults, fCacheResults, txsdata[i], m_chainman.m_validation_cache, &vChecks);
                 if (tx_ok) control->Add(std::move(vChecks));
@@ -4004,14 +4017,19 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
 
     // Check transactions
     // Must check for duplicate inputs (see CVE-2018-17144)
+    size_t qlu_authorizations{0};
     for (const auto& tx : block.vtx) {
         TxValidationState tx_state;
-        if (!CheckTransaction(*tx, tx_state)) {
+        if (!CheckTransaction(*tx, tx_state) || (consensusParams.qlu_devnet && !qlu::CheckTransactionShape(*tx, tx_state))) {
             // CheckBlock() does context-free validation checks. The only
             // possible failures are consensus failures.
             assert(tx_state.GetResult() == TxValidationResult::TX_CONSENSUS);
             return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, tx_state.GetRejectReason(),
                                  strprintf("Transaction check failed (tx hash %s) %s", tx->GetHash().ToString(), tx_state.GetDebugMessage()));
+        }
+        if (consensusParams.qlu_devnet && !tx->IsCoinBase()) {
+            qlu_authorizations += tx->vin.size();
+            if (qlu_authorizations > qlu::MAX_BLOCK_AUTHORIZATIONS) return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "qlu-block-auth-limit");
         }
     }
     // This underestimates the number of sigops, because unlike ConnectBlock it

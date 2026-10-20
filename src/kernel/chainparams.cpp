@@ -33,10 +33,10 @@
 
 using namespace util::hex_literals;
 
-static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesisOutputScript, uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
+static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesisOutputScript, uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward, int32_t txVersion = 1)
 {
     CMutableTransaction txNew;
-    txNew.version = 1;
+    txNew.version = txVersion;
     txNew.vin.resize(1);
     txNew.vout.resize(1);
     txNew.vin[0].scriptSig = CScript() << 486604799 << CScriptNum(4) << std::vector<unsigned char>((const unsigned char*)pszTimestamp, (const unsigned char*)pszTimestamp + strlen(pszTimestamp));
@@ -688,6 +688,49 @@ public:
     }
 };
 
+/**
+ * QLU's disposable, localhost-only-by-default laboratory. This is not a public
+ * launch or a production emission/mining policy. Keep upstream networks intact.
+ */
+class CQLUDevNetParams : public CRegTestParams
+{
+public:
+    CQLUDevNetParams() : CRegTestParams(RegTestOptions{})
+    {
+        m_chain_type = ChainType::QLUDEVNET;
+        consensus.qlu_devnet = true;
+        // SHA256("QLU private devnet v1 network magic")[0:4].
+        pchMessageStart = {0xf1, 0xdc, 0xd3, 0x24};
+        nDefaultPort = 28440;
+        bech32_hrp = "qlud";
+        // Distinct legacy/key serialization prefixes are identifiers, not an
+        // authorization to create classical-only QLU outputs.
+        base58Prefixes[PUBKEY_ADDRESS] = {58};
+        base58Prefixes[SCRIPT_ADDRESS] = {120};
+        base58Prefixes[SECRET_KEY] = {186};
+        base58Prefixes[EXT_PUBLIC_KEY] = {0x51, 0x4c, 0x55, 0x01};
+        base58Prefixes[EXT_SECRET_KEY] = {0x51, 0x4c, 0x55, 0x02};
+
+        // No allocation: explicitly zero-valued and provably unspendable, in
+        // addition to the normal exclusion of genesis from the UTXO set.
+        genesis = CreateGenesisBlock(
+            "QLU private development network 2026-10-19; no monetary value",
+            CScript() << OP_RETURN, 1792368000, 0, 0x207fffff, 1, 0, 2);
+        consensus.hashGenesisBlock = genesis.GetHash();
+        assert(consensus.hashGenesisBlock == uint256{"6267316c0eead38376d28b505d23c779e9f053e6fde5369572f855bfe9d684e5"});
+        assert(genesis.hashMerkleRoot == uint256{"01b208e9ebe024eb7d5c37b7afaf455a8cd10343d609e6a382a36733fc7570bb"});
+        vSeeds.clear();
+        vFixedSeeds.clear();
+        m_assumeutxo_data.clear();
+        chainTxData = ChainTxData{.nTime = 0, .tx_count = 0, .dTxRate = 0};
+    }
+};
+
+std::unique_ptr<const CChainParams> CChainParams::QLUDevNet()
+{
+    return std::make_unique<const CQLUDevNetParams>();
+}
+
 std::unique_ptr<const CChainParams> CChainParams::SigNet(const SigNetOptions& options)
 {
     return std::make_unique<const SigNetParams>(options);
@@ -731,6 +774,7 @@ std::optional<ChainType> GetNetworkForMagic(const MessageStartChars& message)
     const auto testnet4_msg = CChainParams::TestNet4()->MessageStart();
     const auto regtest_msg = CChainParams::RegTest({})->MessageStart();
     const auto signet_msg = CChainParams::SigNet({})->MessageStart();
+    const auto qludev_msg = CChainParams::QLUDevNet()->MessageStart();
 
     if (std::ranges::equal(message, mainnet_msg)) {
         return ChainType::MAIN;
@@ -742,6 +786,8 @@ std::optional<ChainType> GetNetworkForMagic(const MessageStartChars& message)
         return ChainType::REGTEST;
     } else if (std::ranges::equal(message, signet_msg)) {
         return ChainType::SIGNET;
+    } else if (std::ranges::equal(message, qludev_msg)) {
+        return ChainType::QLUDEVNET;
     }
     return std::nullopt;
 }

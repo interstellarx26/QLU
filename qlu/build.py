@@ -70,7 +70,7 @@ def execute(label, command):
 
 
 def configure():
-    doctor(6)
+    doctor(2 if (BUILD / "CMakeCache.txt").exists() else 6)
     command = ["cmake", "-S", ROOT, "-B", BUILD,
                "-DCMAKE_BUILD_TYPE=Release", "-DBUILD_GUI=OFF", "-DENABLE_IPC=OFF",
                "-DBUILD_TESTS=ON", "-DBUILD_BENCH=OFF", "-DBUILD_FUZZ_BINARY=OFF",

@@ -4,6 +4,7 @@
 
 #include <chain.h>
 #include <chainparams.h>
+#include <chainparamsbase.h>
 #include <pow.h>
 #include <test/util/random.h>
 #include <test/util/common.h>
@@ -13,6 +14,54 @@
 #include <boost/test/unit_test.hpp>
 
 BOOST_FIXTURE_TEST_SUITE(pow_tests, BasicTestingSetup)
+
+BOOST_AUTO_TEST_CASE(qlu_private_network_identity)
+{
+    const auto qlu = CreateChainParams(*m_node.args, ChainType::QLUDEVNET);
+    const auto base = CreateBaseChainParams(ChainType::QLUDEVNET);
+    BOOST_CHECK_EQUAL(qlu->GetChainTypeString(), "qludev");
+    BOOST_CHECK_EQUAL(ChainTypeToString(*ChainTypeFromString("qludev")), "qludev");
+    BOOST_CHECK_EQUAL(base->DataDir(), "qludev");
+    BOOST_CHECK_EQUAL(base->RPCPort(), 28540);
+    BOOST_CHECK_EQUAL(qlu->GetDefaultPort(), 28440);
+    BOOST_CHECK_EQUAL(qlu->Bech32HRP(), "qlud");
+    const MessageStartChars expected_magic{0xf1, 0xdc, 0xd3, 0x24};
+    BOOST_CHECK(qlu->MessageStart() == expected_magic);
+    BOOST_CHECK(GetNetworkForMagic(expected_magic) == ChainType::QLUDEVNET);
+    BOOST_CHECK(qlu->GetConsensus().qlu_devnet);
+    BOOST_CHECK(qlu->IsTestChain());
+    BOOST_CHECK(qlu->IsMockableChain());
+    BOOST_CHECK(qlu->DNSSeeds().empty());
+    BOOST_CHECK(qlu->FixedSeeds().empty());
+    BOOST_CHECK(qlu->GetAvailableSnapshotHeights().empty());
+    BOOST_CHECK(qlu->GetConsensus().defaultAssumeValid.IsNull());
+    BOOST_CHECK(qlu->GetConsensus().nMinimumChainWork.IsNull());
+    const auto& genesis = qlu->GenesisBlock();
+    BOOST_CHECK_EQUAL(genesis.GetHash().GetHex(), "6267316c0eead38376d28b505d23c779e9f053e6fde5369572f855bfe9d684e5");
+    BOOST_CHECK_EQUAL(genesis.hashMerkleRoot.GetHex(), "01b208e9ebe024eb7d5c37b7afaf455a8cd10343d609e6a382a36733fc7570bb");
+    BOOST_REQUIRE_EQUAL(genesis.vtx.size(), 1);
+    BOOST_CHECK_EQUAL(genesis.vtx[0]->version, 2);
+    BOOST_REQUIRE_EQUAL(genesis.vtx[0]->vout.size(), 1);
+    BOOST_CHECK_EQUAL(genesis.vtx[0]->vout[0].nValue, 0);
+    BOOST_CHECK(genesis.vtx[0]->vout[0].scriptPubKey.IsUnspendable());
+    BOOST_CHECK(CheckProofOfWork(genesis.GetHash(), genesis.nBits, qlu->GetConsensus()));
+
+    for (const auto chain : {ChainType::MAIN, ChainType::TESTNET, ChainType::TESTNET4, ChainType::SIGNET, ChainType::REGTEST}) {
+        const auto upstream = CreateChainParams(*m_node.args, chain);
+        const auto upstream_base = CreateBaseChainParams(chain);
+        BOOST_CHECK(!upstream->GetConsensus().qlu_devnet);
+        BOOST_CHECK(upstream->GetConsensus().hashGenesisBlock != qlu->GetConsensus().hashGenesisBlock);
+        BOOST_CHECK(upstream->MessageStart() != qlu->MessageStart());
+        BOOST_CHECK(GetNetworkForMagic(upstream->MessageStart()) == chain);
+        BOOST_CHECK(upstream->Bech32HRP() != qlu->Bech32HRP());
+        BOOST_CHECK(upstream_base->DataDir() != base->DataDir());
+        BOOST_CHECK(upstream_base->RPCPort() != base->RPCPort());
+        BOOST_CHECK(upstream->GetDefaultPort() != qlu->GetDefaultPort());
+        for (const auto kind : {CChainParams::PUBKEY_ADDRESS, CChainParams::SCRIPT_ADDRESS, CChainParams::SECRET_KEY, CChainParams::EXT_PUBLIC_KEY, CChainParams::EXT_SECRET_KEY}) {
+            BOOST_CHECK(upstream->Base58Prefix(kind) != qlu->Base58Prefix(kind));
+        }
+    }
+}
 
 /* Test calculation of next difficulty target with no constraints applying */
 BOOST_AUTO_TEST_CASE(get_next_work)

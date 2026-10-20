@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <init.h>
+#include <common/args.h>
 #include <interfaces/init.h>
 #include <rpc/server.h>
 
@@ -18,6 +19,29 @@ struct InitTestSetup : BasicTestingSetup {
 };
 
 BOOST_FIXTURE_TEST_SUITE(node_init_tests, InitTestSetup)
+
+BOOST_AUTO_TEST_CASE(qlu_private_defaults)
+{
+    ArgsManager args;
+    SetupServerArgs(args, true);
+    args.ForceSetArg("-chain", "qludev");
+    InitParameterInteraction(args);
+    BOOST_CHECK_EQUAL(args.GetArg("-bind", ""), "127.0.0.1");
+    BOOST_CHECK_EQUAL(args.GetArg("-connect", ""), "0");
+    BOOST_CHECK(args.GetBoolArg("-listen", false));
+    for (const auto* option : {"-dnsseed", "-fixedseeds", "-discover", "-natpmp", "-listenonion", "-i2pacceptincoming"}) {
+        BOOST_CHECK(!args.GetBoolArg(option, true));
+    }
+
+    // An explicit no-listen operator choice must not acquire a conflicting bind.
+    ArgsManager no_listen;
+    SetupServerArgs(no_listen, true);
+    no_listen.ForceSetArg("-chain", "qludev");
+    no_listen.ForceSetArg("-listen", "0");
+    InitParameterInteraction(no_listen);
+    BOOST_CHECK(!no_listen.GetBoolArg("-listen", true));
+    BOOST_CHECK(!no_listen.IsArgSet("-bind"));
+}
 
 //! Custom implementation of interfaces::Init for testing.
 class TestInit : public interfaces::Init

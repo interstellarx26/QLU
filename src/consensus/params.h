@@ -82,6 +82,8 @@ struct BIP9Deployment {
  * Parameters that influence chain consensus.
  */
 struct Params {
+    /** Experimental QLU private-network rules; never enabled on upstream networks. */
+    bool qlu_devnet{false};
     uint256 hashGenesisBlock;
     int nSubsidyHalvingInterval;
     /**

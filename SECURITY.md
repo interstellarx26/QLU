@@ -1,6 +1,6 @@
 # QLU security status
 
-QLU is pre-release research and development. This checkout currently provides an upstream Bitcoin Core regtest laboratory; it has not implemented or independently validated QLU post-quantum consensus.
+QLU is pre-release research and development. This checkout implements experimental QLU private-network identity, hybrid post-quantum spending, and encrypted recovery, alongside the original Bitcoin regtest laboratory. It has not received an independent specialist security audit and is not suitable for real-value funds. The live prototype wallet stores its seed in a restricted plaintext file; backup encryption does not protect a compromised running device.
 
 During private development, report QLU-specific concerns directly to the project owner. No dedicated public QLU vulnerability-reporting address or response-time commitment has been established yet. Establish and verify that channel before public release. Do not include private keys, recovery codes, wallet files, or RPC cookies in public issues.
 

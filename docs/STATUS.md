@@ -1,76 +1,83 @@
-# Foundation status
+# QLU private v1 status
 
-Date: 2026-10-19 (America/Chicago).
+Date: 2026-10-19 (America/Chicago; verification timestamps continue into 2026-10-20 UTC).
 
-**Stage 0 is built and verified: a four-node, localhost-only Bitcoin regtest laboratory.**
-The nodes are stopped after verification. Test coins have no value.
+**Implemented and locally verified:** separate QLU development identity, mandatory ML-DSA-65
+AND Schnorr spending, encrypted recovery, and restored-key spending on four loopback nodes.
+Test coins have no value. Both laboratory networks are stopped after tests.
 
-## Project and provenance
+## Project and scope
 
-- Active checkout: `$HOME/Developer/QLU`, branch `qlu/main`.
-- `$HOME/Documents/ChatGPT/QLU` links to that checkout.
-- Upstream: Bitcoin Core v31.1, commit `9be056a8a72b624dae9623b2f7bded92c2a21c91`.
-- Verified implementation: `25e60ec4e7952b5c461a5d198db82930476f9b72`. Subsequent status-document edits do not change the tested code.
-- The engine, upstream test sources, and upstream build definitions match the pinned release. Upstream Git ancestry and MIT attribution are retained.
-- Release identity was checked against official HTTPS sources; the maintainer PGP signature has not been independently authenticated.
+- Active project: `$HOME/Developer/QLU`, branch `qlu/main`; the original chat
+  workspace links here. The old q-chain project folders remain untouched.
+- Upstream ancestry: Bitcoin Core v31.1, `9be056a8a72b624dae9623b2f7bded92c2a21c91`.
+  Unlike stage 0, this milestone deliberately modifies consensus for `qludev` only.
+- Accepted rules and byte formats: [QLU private v1](QLU_PRIVATE_V1.md).
+- Private QLU data `.local/qlu-private-v1/`; preserved Bitcoin baseline `.local/devnet/`.
+- OpenSSL 3.6.4 provides ML-DSA; pinned upstream libsecp256k1 provides Schnorr. Recovery
+  dependencies: cryptography 50.0.2, cffi 2.1.1, pycparser 3.11, with PyPI wheel hashes.
+- Network identity, parameter parsing, cryptography integration, validation, recovery,
+  transaction serialization and CI changes received separate agent reviews. This is not
+  an independent specialist audit.
 
-## Results
+## Verified behavior
 
-| Check | Observed result |
+| Check | Result |
 | --- | --- |
-| Fresh release configuration and build in the active folder | Passed, exit status 0 |
-| Registered upstream CTest entries | **152 passed, 0 failed, 1 skipped** |
-| QLU controller safety tests | **23 passed** |
-| Two consecutive real-node smoke runs using the freshly built node | **Both passed**, with complete source and binary fingerprints |
-| Final process state | All four owned nodes stopped; private ports available |
+| Native release build | Passed on this Mac |
+| Registered C++ CTest entries | 154 passed, 0 failed, 1 skipped (155 total) |
+| Controller, recovery and protocol Python tests | 54 passed |
+| QLU identity | Four nodes agree on QLU genesis; separate ports, data and addresses; local peer mesh |
+| Hybrid spending | Both signatures mandatory; genuine ML-DSA implementation and external key-generation known answer tested |
+| Invalid payments | Altered amounts, corrupted/missing signatures, wrong-network authorization, legacy and unknown outputs rejected |
+| Directly submitted invalid blocks | Bad signature, classical mining reward, unknown output and excessive authorization count rejected on every node after recomputing witness commitments and proof of work |
+| Authorization resource boundary | 256 accepted structurally; 257 rejected; 16-input/32-output transaction limits tested |
+| Valid payment after invalid witness variants | Same-txid valid transaction propagates to all four mempools and confirms |
+| Recovery | Original test wallet removed; new process restores a new file; same keys rediscover an unspent output and send a confirmed payment |
+| Restart | Recovered payment survives all four nodes restarting |
+| Runtime cryptography failure | Misconfigured provider prevents node startup with a clear error, before chain files/RPC cookies are created |
+| Preserved upstream baseline | Four-node Bitcoin regtest smoke still passes with the modified binary |
+| Cleanup | Both controllers stop all their owned nodes |
 
-Each smoke run verifies four regtest nodes, a complete loopback peer mesh, payment propagation
-to all mempools and confirmation, rejection of a transaction spending nonexistent coins,
-chain and wallet persistence across restart, and cleanup. Existing laboratory data was reused.
+One optional CTest group, `script_assets_tests`, is skipped because the external
+`DIR_UNIT_TEST_DATA` corpus is not configured. Counts are groups, not individual assertions.
+The measured one-input/one-output hybrid transaction was **5,462 serialized bytes**. This is
+an observation from the smoke test, not a throughput, fee or mobile-performance claim.
 
-The skipped upstream entry is `script_assets_tests`: its external corpus was not configured
-(`DIR_UNIT_TEST_DATA` unset). The full upstream Python functional suite, sanitizers, hosted
-Linux/macOS CI, public-network operation, and backup restoration were **not** run. Restart
-persistence is not evidence of recovery after losing wallet data.
+The recovery drill proves a fresh process and file on the same Mac, not a second physical
+device. Disposable backup/code files are colocated under ignored `.local/recovery-drills/`
+for automation; real offline separation is still required for users.
 
-## Evidence and setup fixes
+## Evidence
 
-Machine-readable results are in ignored `.local/evidence/verification-summary.json`. Supporting
-records include the `20261020T004954248915Z-build` log/JSON pair, the
-`20261020T005443033391Z-ctest` pair, `controller-tests.log` and `.json`, and smoke attempts
-`20261020T005332268404Z-3254f227` and `20261020T005339846979Z-1850ef4b`.
-CTest also writes `build/qlu-foundation/qlu-ctest.xml`.
+Ignored `.local/evidence/` retains timestamped build/CTest logs and pass/failure attempts.
+`verification-summary-private.json` identifies the final implementation revision, source tree,
+node/keytool hashes and current reports. Main reports are `qlu-private-latest.json`,
+`devnet-smoke.json`, `provider-startup-negative.json`, and `python-tests-private.log`.
+CTest XML is `build/qlu-foundation/qlu-ctest.xml`. No private wallet/code/cookie files are committed.
 
-Verified node binary SHA-256:
-`646c32dec2891a790ece17259de3ce629b89ae2c1edb0b218e6bb94046d7a64d`.
+Development failures were retained and corrected: missing OpenSSL test include propagation
+and CMake target scope, a narrowed integer in a test fixture, and a block-rejection test that
+encountered already-processed peer headers. Each node now receives a distinct solved invalid
+header so the test checks independent rejection. The startup negative test initially treated
+creation of empty data directories as chain startup; inspection confirmed only empty directories
+existed, and the final test checks no chain files or RPC cookies instead.
 
-An early repeat run exposed insufficient inbound connection capacity. The controller now
-allows enough connections and requires handshakes with all three distinct owned peers before
-starting network checks. It also synchronizes existing tips before mining. Regression tests
-cover partitions, duplicate peers, incomplete handshakes, and wrong chain tips.
+## Boundaries and next work
 
-The initial Documents checkout experienced intermittent file-read and directory-move stalls.
-The exact OS cause is unconfirmed. A fresh checkout at the same upstream pin in the development
-folder, with all QLU changes and stopped-node data preserved, built and verified successfully.
-Provenance commands now have bounded timeouts and record failure before starting nodes.
-Earlier failed attempts remain in the evidence directory. The initial setup copy and its local
-history are preserved at `$HOME/Documents/ChatGPT/QLU-setup-archive-20261019`,
-clearly marked as an archive. All three supplied q-chain reference folders remain untouched.
+- Single-key signing and recovery prototype; no HD rotation, contact UI, hardware-backed live
+  keys, automatic consumer recovery flow or production account discovery service.
+- Live wallet files contain plaintext seeds protected by mode 0600; backups use AES-256-GCM.
+  Python cannot guarantee secret-memory erasure. Restoration does not revoke stolen key copies.
+- No RandomX, production issuance/difficulty rules, public testnet/mainnet or paid cloud API.
+- No sustained hostile-network/fuzzing/sanitizer runs, full upstream Python functional suite,
+  second-device recovery, cross-implementation signature verification, mobile measurements,
+  reproducible signed release or independent specialist security audit yet.
+- CI workflow now builds the required OpenSSL on Linux, checks dependency selection, and tests
+  both networks plus recovery. It has been syntax checked, not run on hosted CI.
+- Host macOS 27 / selected SDK 26.5; locally installed OpenSSL/libevent target macOS 27 and
+  generate linker warnings. Local success does not demonstrate compatibility with older Macs.
 
-With permission, rebuildable npm, uv, and Homebrew caches were removed, recovering approximately
-7.12 GiB before the new builds. Approximately 6.75 GiB remained at final verification.
-
-The verified host is macOS 27.0.1 on ARM64, using Apple Clang 21 and the macOS 26.5 SDK.
-The linker reported that installed libevent libraries target macOS 27, plus duplicate-library
-warnings. Execution passed on this host; compatibility with older Macs and reproducible release
-binaries are not established.
-
-## Next milestone
-
-Specify QLU network identity, ML-DSA spending and recovery rules, key derivation, backup format,
-and test vectors before changing consensus. Then integrate and measure those changes separately
-from RandomX and issuance parameters.
-
-QLU consensus, quantum-resistant signatures, RandomX, wallet recovery, Developer Cloud, billing,
-public testnet, and mainnet remain **unimplemented**. The business direction is documented in
-[Developer Cloud](DEVELOPER_CLOUD.md); no commercial service or pricing has been launched.
+Next: benchmark and harden this protocol, test independent implementations and a second device,
+then design HD/live-key storage and RandomX/economics as separately reviewed milestones.
+The [historical stage-0 report](STATUS-FOUNDATION.md) preserves the earlier foundation evidence.

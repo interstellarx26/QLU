@@ -7,8 +7,10 @@
   "release_notes": "https://bitcoincore.org/en/releases/31.1/",
   "verified_on": "2026-10-19",
   "verification": "Official GitHub release API, official release index, and annotated tag peeled commit agreed over HTTPS. Maintainer PGP signature not independently authenticated.",
-  "stage": "upstream-regtest-foundation",
-  "qlu_consensus": false,
-  "post_quantum_signatures": false,
-  "randomx_mining": false
+  "stage": "private-hybrid-v1",
+  "qlu_consensus": true,
+  "post_quantum_signatures": true,
+  "randomx_mining": false,
+  "enabled_qlu_chain": "qludev",
+  "security_scope": "Experimental private spending and backup only; unaudited, no public release. Bitcoin baseline networks unchanged."
 }

@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <common/args.h>
+#include <chainparamsbase.h>
 #include <sync.h>
 #include <test/util/logging.h>
 #include <test/util/setup_common.h>
@@ -81,6 +82,30 @@ struct TestArgsManager : public ArgsManager
     using ArgsManager::m_network;
     using ArgsManager::m_settings;
 };
+
+BOOST_AUTO_TEST_CASE(qlu_chain_selection)
+{
+    TestArgsManager args;
+    SetupChainParamsBaseOptions(args);
+    std::string error;
+    const char* qlu[] = {"cmd", "-qludev"};
+    const char* chain[] = {"cmd", "-chain=qludev"};
+    const char* conflict[] = {"cmd", "-qludev", "-regtest"};
+    const char* repeated[] = {"cmd", "-qludev", "-chain=qludev"};
+    const char* disabled[] = {"cmd", "-noqludev", "-regtest"};
+    BOOST_REQUIRE(args.ParseParameters(2, qlu, error));
+    BOOST_CHECK(args.GetChainType() == ChainType::QLUDEVNET);
+    BOOST_REQUIRE(args.ParseParameters(2, chain, error));
+    BOOST_CHECK_EQUAL(args.GetChainTypeString(), "qludev");
+    BOOST_REQUIRE(args.ParseParameters(3, conflict, error));
+    BOOST_CHECK_THROW(args.GetChainType(), std::runtime_error);
+    BOOST_REQUIRE(args.ParseParameters(3, repeated, error));
+    BOOST_CHECK_THROW(args.GetChainType(), std::runtime_error);
+    BOOST_REQUIRE(args.ParseParameters(3, disabled, error));
+    BOOST_CHECK(args.GetChainType() == ChainType::REGTEST);
+    args.ReadConfigString("[qludev]\n");
+    BOOST_CHECK(args.GetUnrecognizedSections().empty());
+}
 
 //! Test GetSetting and GetArg type coercion, negation, and default value handling.
 class CheckValueTest : public TestChain100Setup

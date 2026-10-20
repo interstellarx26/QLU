@@ -128,6 +128,8 @@ std::unique_ptr<const CChainParams> CreateChainParams(const ArgsManager& args, c
         ReadSigNetArgs(args, opts);
         return CChainParams::SigNet(opts);
     }
+    case ChainType::QLUDEVNET:
+        return CChainParams::QLUDevNet();
     case ChainType::REGTEST: {
         auto opts = CChainParams::RegTestOptions{};
         ReadRegTestArgs(args, opts);

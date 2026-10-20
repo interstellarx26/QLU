@@ -53,6 +53,8 @@ target_link_libraries(bitcoin_clientversion
 add_dependencies(bitcoin_clientversion generate_build_info)
 
 add_subdirectory(crypto)
+find_package(OpenSSL 3.5 REQUIRED COMPONENTS Crypto)
+add_subdirectory(qlu)
 add_subdirectory(util)
 if(ENABLE_IPC)
   add_subdirectory(ipc)
@@ -182,6 +184,7 @@ add_library(bitcoin_node STATIC EXCLUDE_FROM_ALL
   blockencodings.cpp
   blockfilter.cpp
   consensus/tx_verify.cpp
+  qlu/consensus.cpp
   dbwrapper.cpp
   deploymentstatus.cpp
   flatfile.cpp
@@ -274,6 +277,7 @@ add_library(bitcoin_node STATIC EXCLUDE_FROM_ALL
 )
 target_link_libraries(bitcoin_node
   PRIVATE
+    qlu_crypto
     core_interface
     bitcoin_common
     bitcoin_util

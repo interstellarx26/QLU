@@ -2,10 +2,11 @@
 
 A fresh, payments-first blockchain project by VibexHQ, with an optional developer-infrastructure business.
 
-**Current stage: private-network foundation.** This repository currently builds unmodified Bitcoin Core 31.1 consensus for a four-node, localhost-only regtest laboratory. These are valueless test coins. QLU network identity, ML-DSA quantum-resistant authorization, RandomX mining, wallet recovery, and Developer Cloud are planned stages, not implemented features.
+**Current stage: QLU private v1 prototype.** The separate `qludev` network implements its own identity, mandatory ML-DSA-65 + Schnorr spending, and an encrypted backup/recovery experiment. It runs four local nodes with valueless test coins. The earlier Bitcoin regtest baseline is preserved. This is unaudited development code; RandomX, production economics, contact-wallet UX, and Developer Cloud are later stages.
 
 ## Start here
 
+- [Private v1 protocol rules](docs/QLU_PRIVATE_V1.md)
 - [Accepted blueprint](docs/BLUEPRINT.md)
 - [Vibex Developer Cloud business direction](docs/DEVELOPER_CLOUD.md)
 - [Build and private-network guide](docs/FOUNDATION.md)
@@ -14,17 +15,20 @@ A fresh, payments-first blockchain project by VibexHQ, with an optional develope
 
 ## Local workflow
 
-Run from this repository with Python 3.10+ and the build dependencies in the foundation guide:
+Run from this repository with Python 3.10+, OpenSSL 3.5+ (tested 3.6.4), and the build dependencies in the foundation guide:
 
 ```sh
 python3 qlu/build.py doctor
 python3 qlu/build.py build --jobs 2
 python3 qlu/build.py test --jobs 2
-python3 -m unittest discover -s qlu/tests -v
+python3 -m venv .local/recovery-venv
+.local/recovery-venv/bin/python -m pip install --require-hashes --only-binary=:all: -r qlu/recovery-requirements.txt
+.local/recovery-venv/bin/python -m unittest discover -s qlu/tests -v
+.local/recovery-venv/bin/python qlu/private_net.py smoke
 python3 qlu/devnet.py smoke
 ```
 
-The smoke test creates four private nodes, exercises test payments and synchronization, checks invalid-spend rejection and restart persistence, and stops its nodes. Use `setup`, `start`, `status`, and `stop` for manual laboratory operation. No existing wallet folders or previous q-chain projects are used.
+The QLU smoke test checks separate identity, both signatures, adversarial transactions and directly submitted blocks, network replay rejection, recovery after deleting the original test wallet, a restored-key payment, restart, and cleanup. The second smoke command separately checks the preserved upstream baseline. Use `setup`, `start`, `status`, and `stop` for manual laboratory operation. No existing wallet folders or previous q-chain projects are used.
 
 Local node data, wallets, credentials, and test evidence are ignored under `.local/`. Do not publish them. The node's privileged RPC must never be exposed as a public cloud API.
 
