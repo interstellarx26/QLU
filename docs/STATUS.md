@@ -8,14 +8,19 @@ Test coins have no value. Both laboratory networks are stopped after tests.
 
 Follow-on milestone: [performance baseline](PERFORMANCE.md) now passes locally,
 including an actually connected 256-authorization block and a fresh-process
-offline-response recovery rehearsal. The separate MacBook test is prepared through
-[device recovery tooling](MACBOOK_RECOVERY.md); physical completion remains pending.
+offline-response recovery rehearsal. The separate MacBook recovery/spending trial
+has now [passed](MACBOOK_RECOVERY_RESULT.md): the transferred response matched its
+fingerprint, both signatures were accepted and its payment confirmed on four nodes.
+Physical-device identity is user-attested; the disclosed disposable code makes
+this an interoperability result, not proof of secret custody.
 Recovery across Mac, native Windows, Linux, iPhone, and Android is now a mandatory
 [release gate](RECOVERY_RELEASE_GATE.md), not an existing support claim.
 The follow-on Python suite passes 106 tests, covering the prior behavior plus the
 offline challenge, coordinator, shared port lock and source-kit integrity. The
 extracted MacBook source kit also builds locally and passes its native self-test
-and 46 packaged recovery tests. It has not yet run on macOS 26.4. Historical counts below
+and 46 packaged recovery tests. The user also reports a passing native build/self-test
+and 46 passing tests on the macOS 26.4 MacBook; its returned payment is independently
+verified here. Historical counts below
 describe the preceding protocol milestone; C++ consensus code was not changed
 for this follow-on work.
 
@@ -57,8 +62,9 @@ One optional CTest group, `script_assets_tests`, is skipped because the external
 The measured one-input/one-output hybrid transaction was **5,462 serialized bytes**. This is
 an observation from the smoke test, not a throughput, fee or mobile-performance claim.
 
-The recovery drill proves a fresh process and file on the same Mac, not a second physical
-device. Disposable backup/code files are colocated under ignored `.local/recovery-drills/`
+That earlier recovery drill proves a fresh process and file on the same Mac.
+The later [MacBook trial](MACBOOK_RECOVERY_RESULT.md) records the separate-device result.
+Disposable backup/code files are colocated under ignored `.local/recovery-drills/`
 for automation; real offline separation is still required for users.
 
 ## Evidence
@@ -84,13 +90,13 @@ existed, and the final test checks no chain files or RPC cookies instead.
   Python cannot guarantee secret-memory erasure. Restoration does not revoke stolen key copies.
 - No RandomX, production issuance/difficulty rules, public testnet/mainnet or paid cloud API.
 - No sustained hostile-network/fuzzing/sanitizer runs, full upstream Python functional suite,
-  second-device recovery, cross-implementation signature verification, mobile measurements,
+  full cross-platform recovery matrix, cross-implementation signature verification, mobile measurements,
   reproducible signed release or independent specialist security audit yet.
 - CI workflow now builds the required OpenSSL on Linux, checks dependency selection, and tests
   both networks plus recovery. It has been syntax checked, not run on hosted CI.
 - Host macOS 27 / selected SDK 26.5; locally installed OpenSSL/libevent target macOS 27 and
   generate linker warnings. Local success does not demonstrate compatibility with older Macs.
 
-Next: harden and broaden the measured protocol, test independent implementations and a second device,
+Next: harden and broaden the measured protocol, test independent implementations and the remaining platforms,
 then design HD/live-key storage and RandomX/economics as separately reviewed milestones.
 The [historical stage-0 report](STATUS-FOUNDATION.md) preserves the earlier foundation evidence.

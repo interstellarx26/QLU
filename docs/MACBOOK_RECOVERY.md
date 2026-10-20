@@ -4,6 +4,11 @@ Target: MacBook Air 15-inch, M4 (2025), 16 GB, macOS Tahoe 26.4, with Codex.
 Use only the disposable QLU private-network test coins. A successful local
 rehearsal does not complete this physical-device test.
 
+**First trial completed:** [origin verification and four-node confirmation passed](MACBOOK_RECOVERY_RESULT.md)
+on 2026-10-19. The instructions below are retained for future freshly prepared
+trials. Session `ed5cb43b67794073a0a5aaa9bf051f76` is complete; its challenge is
+spent and its disclosed disposable code/keys must not be reused for real value.
+
 ## What to transfer
 
 Copy the prepared `qlu-recovery-<session>-<revision>.tar.gz` source kit to the MacBook.

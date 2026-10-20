@@ -77,9 +77,11 @@ timings exclude file transfer, human code entry, process startup, and chain disc
 A separate fresh-process rehearsal restored the disposable wallet, produced a
 signed response, and confirmed its payment on all four nodes. This remains a
 **same-host rehearsal**. The first physical-device target is the user's MacBook Air
-15-inch M4 (2025), 16 GB, macOS Tahoe 26.4. Physical completion is pending a response
-from that machine and on-chain verification here. See the [MacBook guide](MACBOOK_RECOVERY.md)
-and the mandatory [cross-platform release gate](RECOVERY_RELEASE_GATE.md).
+15-inch M4 (2025), 16 GB, macOS Tahoe 26.4. Its returned response subsequently
+[passed origin verification and four-node confirmation](MACBOOK_RECOVERY_RESULT.md).
+The target's single reported timing is recorded separately from this origin-host
+benchmark. See the [MacBook guide](MACBOOK_RECOVERY.md) and the mandatory
+[cross-platform release gate](RECOVERY_RELEASE_GATE.md).
 
 ## Reproduce and inspect
 

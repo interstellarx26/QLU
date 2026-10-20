@@ -10,7 +10,7 @@ All trials use disposable private-network coins with no monetary value.
 
 | Target | Required execution environment | Current status |
 | --- | --- | --- |
-| Mac, Apple silicon | Native application/tool on physical hardware | Existing local Mac drill; separate MacBook trial pending |
+| Mac, Apple silicon | Native application/tool on physical hardware | First Mac-to-Mac recovery/payment trial passed; full platform acceptance still pending |
 | Mac, Intel | Native application/tool on physical hardware | Not run |
 | Windows | Native Windows application/tool on physical hardware | Not implemented or run; WSL does not satisfy this row |
 | Linux | Native application/tool on physical hardware; name distribution and architecture | Not run |
@@ -70,7 +70,12 @@ device was used. No serial number, hostname, account name, MAC address, or stabl
 device identifier is necessary. Platform metadata and signatures alone do not
 prove different hardware; the physical-device claim relies on operator evidence.
 
-The result is **pending** until the returned MacBook response is independently
-checked and confirmed. A same-computer rehearsal remains a rehearsal even if the
-operator-mode field says `physical-device`. Passing this first trial does not
-complete the full matrix or establish production security.
+The first trial [passed on 2026-10-19](MACBOOK_RECOVERY_RESULT.md): the original
+Mac matched the transferred file fingerprint, checked both signatures and
+confirmed the exact payment on all four nodes. Separate-device use was attested
+by the user. The code was disclosed in chat at the user's request, so this trial
+does not satisfy secret-custody/offline-code handling acceptance. Target discovery,
+peak memory and the rest of the platform matrix also remain outstanding.
+A same-computer rehearsal remains a rehearsal even if its operator-mode field
+says `physical-device`. This first trial does not complete the release gate or
+establish production security.
