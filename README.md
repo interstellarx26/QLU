@@ -13,6 +13,7 @@ A fresh, payments-first blockchain project by VibexHQ, with an optional develope
 - [Current verification and next work](docs/STATUS.md)
 - [Measured private-network performance](docs/PERFORMANCE.md)
 - [Encrypted wallet and guided recovery](docs/SECURE_WALLET.md)
+- [MacBook encrypted-wallet test steps](docs/MACBOOK_WALLET_TEST.md)
 - [MacBook recovery test](docs/MACBOOK_RECOVERY.md)
 - [Cross-platform recovery release gate](docs/RECOVERY_RELEASE_GATE.md)
 - [Pinned upstream provenance](qlu/upstream.json)

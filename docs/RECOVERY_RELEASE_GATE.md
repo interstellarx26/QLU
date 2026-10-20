@@ -88,3 +88,8 @@ backup. Its same-Mac fresh-process drill is a separate result. The first MacBook
 trial above does not test this new vault or interface. Repeat physical-device
 acceptance with newly generated materials, including lock/idle behavior, backup
 readback, direct encrypted restoration, and platform storage protections.
+
+The [updated MacBook source-kit workflow](MACBOOK_WALLET_TEST.md) is prepared for
+that follow-on trial. Its same-host automated rehearsal can shorten the idle
+interval; the physical-device runner and origin validator require 300 seconds.
+Passing a rehearsal or building a package does not complete physical acceptance.

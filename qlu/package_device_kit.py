@@ -9,6 +9,7 @@ the internal manifest detects changes, but is not an independently trusted signe
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import gzip
 import hashlib
 import io
@@ -39,6 +40,20 @@ SOURCE_TREES = ("src/secp256k1", "src/univalue/include", "src/univalue/lib",
                 "test/functional/test_framework")
 SCRIPT_HASHES = {"device_recovery_sha256": "qlu/device_recovery.py",
                  "protocol_sha256": "qlu/protocol.py", "recovery_sha256": "qlu/recovery.py"}
+RECOVERY_PROFILE = "recovery-v1"
+WALLET_PROFILE = "encrypted-wallet-v1"
+WALLET_SOURCE_FILES = (
+    "qlu/vault.py", "qlu/wallet.py", "qlu/wallet_device.py",
+    "qlu/tests/test_vault.py", "qlu/tests/test_wallet.py", "qlu/tests/test_wallet_device.py",
+    "docs/SECURE_WALLET.md", "docs/MACBOOK_WALLET_TEST.md",
+)
+WALLET_SCRIPT_HASHES = {"vault_sha256": "qlu/vault.py", "wallet_sha256": "qlu/wallet.py",
+                        "wallet_device_sha256": "qlu/wallet_device.py"}
+WALLET_ORIGIN_FIELDS = {
+    "format", "version", "session_id", "purpose", "network_id", "genesis_hash",
+    "challenge_sha256", "backup_sha256", "wallet_commitment", "tooling",
+    "origin_vault_sha256", "origin_checks", "created_at",
+}
 NOTICE = b"""QLU private recovery source kit
 
 Experimental, unaudited; private development coins have no monetary value.
@@ -106,8 +121,14 @@ def _git(root: Path, *args: str) -> bytes:
     return result.stdout
 
 
-def selected_sources(root: Path = ROOT) -> dict[str, bytes]:
-    names = set(SOURCE_FILES)
+def _source_files(profile: str) -> tuple[str, ...]:
+    if type(profile) is not str or profile not in (RECOVERY_PROFILE, WALLET_PROFILE):
+        raise KitError("Unsupported source-kit profile")
+    return SOURCE_FILES + (WALLET_SOURCE_FILES if profile == WALLET_PROFILE else ())
+
+
+def selected_sources(root: Path = ROOT, *, profile: str = RECOVERY_PROFILE) -> dict[str, bytes]:
+    names = set(_source_files(profile))
     tracked = _git(root, "ls-files", "-z", "--", *SOURCE_TREES).decode().split("\0")
     for name in filter(None, tracked):
         if name.startswith("test/functional/test_framework/") and not name.endswith(".py"):
@@ -121,7 +142,51 @@ def selected_sources(root: Path = ROOT) -> dict[str, bytes]:
     return result
 
 
-def create(identifier: str, root: Path = ROOT) -> dict:
+def _validate_wallet_origin(origin: dict, context: dict, challenge: dict,
+                            source_hashes: dict[str, str]) -> None:
+    """Check public wallet provenance using only standard-library operations."""
+    if (type(origin) is not dict or origin.keys() != WALLET_ORIGIN_FIELDS
+            or origin["format"] != "qlu-wallet-device-origin"
+            or type(origin["version"]) is not int or origin["version"] != 1):
+        raise KitError("Unsupported encrypted-wallet origin metadata")
+    for field in ("session_id", "purpose", "network_id", "genesis_hash", "challenge_sha256", "backup_sha256"):
+        if type(origin[field]) is not str or origin[field] != context.get(field):
+            raise KitError("Encrypted-wallet origin identity does not match the session")
+    if (origin["purpose"] not in ("rehearsal", "physical-device")
+            or re.fullmatch(r"[0-9a-f]{32}", origin["session_id"]) is None
+            or re.fullmatch(r"[a-z][a-z0-9-]{0,63}", origin["network_id"]) is None):
+        raise KitError("Invalid encrypted-wallet origin identity")
+    for field in ("genesis_hash", "challenge_sha256", "backup_sha256", "wallet_commitment", "origin_vault_sha256"):
+        if type(origin[field]) is not str or re.fullmatch(r"[0-9a-f]{64}", origin[field]) is None:
+            raise KitError("Invalid encrypted-wallet origin fingerprint")
+    if (type(challenge) is not dict or origin["wallet_commitment"] != challenge.get("wallet_commitment")
+            or origin["session_id"] != challenge.get("challenge_id")
+            or origin["network_id"] != challenge.get("network_id")
+            or origin["genesis_hash"] != challenge.get("genesis_hash")):
+        raise KitError("Encrypted-wallet origin does not match its payment challenge")
+    tooling = origin["tooling"]
+    if type(tooling) is not dict or tooling.keys() != WALLET_SCRIPT_HASHES.keys():
+        raise KitError("Unsupported encrypted-wallet source fingerprints")
+    for field, path in WALLET_SCRIPT_HASHES.items():
+        if (type(tooling[field]) is not str or re.fullmatch(r"[0-9a-f]{64}", tooling[field]) is None
+                or tooling[field] != source_hashes.get(path)):
+            raise KitError("Encrypted-wallet sources changed after session preparation")
+    checks = origin["origin_checks"]
+    if (type(checks) is not dict or checks.keys() != {"encrypted_reopen_same_identity", "portable_backup_verified"}
+            or any(value is not True for value in checks.values())):
+        raise KitError("Encrypted-wallet origin checks are incomplete")
+    if type(origin["created_at"]) is not str or not 1 <= len(origin["created_at"]) <= 64:
+        raise KitError("Invalid encrypted-wallet origin timestamp")
+    try:
+        created = datetime.fromisoformat(origin["created_at"])
+    except ValueError:
+        raise KitError("Invalid encrypted-wallet origin timestamp") from None
+    if created.tzinfo is None or created.utcoffset() is None:
+        raise KitError("Encrypted-wallet origin timestamp requires a timezone")
+
+
+def create(identifier: str, root: Path = ROOT, *, profile: str = RECOVERY_PROFILE) -> dict:
+    _source_files(profile)
     sys.path.insert(0, str(root / "qlu"))
     import device_lab
     import recovery
@@ -129,7 +194,7 @@ def create(identifier: str, root: Path = ROOT) -> dict:
 
     root = root.resolve()
     run, session, challenge = device_lab.read_session(root, device_lab.session_id(identifier))
-    files = selected_sources(root)
+    files = selected_sources(root, profile=profile)
     for name, path in SCRIPT_HASHES.items():
         if hashlib.sha256(files[path]).hexdigest() != session["origin_tooling"][name]:
             raise KitError("Recovery sources changed after session preparation")
@@ -137,6 +202,15 @@ def create(identifier: str, root: Path = ROOT) -> dict:
     files["transfer/backup.json"] = recovery.read_private(run / "transfer/backup.json")
     files["transfer/challenge.json"] = recovery.read_private(run / "transfer/challenge.json")
     files["NOTICE"] = NOTICE
+    if profile == WALLET_PROFILE:
+        origin_blob = recovery.read_private(run / "wallet-origin.json")
+        origin = json.loads(origin_blob, object_pairs_hook=_pairs)
+        _validate_wallet_origin(origin, session, challenge,
+                                {path: hashlib.sha256(files[path]).hexdigest() for path in WALLET_SCRIPT_HASHES.values()})
+        files["transfer/wallet-origin.json"] = origin_blob
+        files["NOTICE"] += (b"\nProfile: encrypted-wallet-v1. Read docs/MACBOOK_WALLET_TEST.md.\n"
+                            b"The encrypted origin vault and its local passphrase are absent.\n"
+                            b"Create a new local encrypted vault and passphrase on the target.\n")
     records = {name: {"sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}
                for name, data in sorted(files.items())}
     manifest = {"format": "qlu-recovery-source-kit", "version": 1,
@@ -146,10 +220,12 @@ def create(identifier: str, root: Path = ROOT) -> dict:
                 "source_commit": _git(root, "rev-parse", "HEAD").decode().strip(),
                 "source_has_uncommitted_changes": bool(_git(root, "status", "--porcelain", "--untracked-files=normal")),
                 "upstream": json.loads(files["qlu/upstream.json"]), "files": records}
+    if profile == WALLET_PROFILE:
+        manifest.update(profile=profile, wallet_origin_sha256=hashlib.sha256(origin_blob).hexdigest())
     files["KIT-MANIFEST.json"] = _canonical(manifest) + b"\n"
     base = root / ".local" / "device-kits"
     secure_directory(base)
-    prefix = "qlu-recovery-" + identifier
+    prefix = ("qlu-wallet-" if profile == WALLET_PROFILE else "qlu-recovery-") + identifier
     revision = hashlib.sha256(_canonical(manifest)).hexdigest()[:12]
     archive = base / (prefix + "-" + revision + ".tar.gz")
     directory_fd, basename = recovery._open_parent(archive)
@@ -179,10 +255,13 @@ def create(identifier: str, root: Path = ROOT) -> dict:
         os.close(directory_fd)
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     recovery.write_private(base / (archive.name + ".sha256"), (digest + "  " + archive.name + "\n").encode())
-    return {"archive": str(archive), "sha256": digest, "bytes": archive.stat().st_size,
-            "source_files": len(records), "session_id": identifier, "purpose": session["purpose"],
-            "code_included": False, "native_binary_included": False,
-            "physical_device_test_completed": False}
+    result = {"archive": str(archive), "sha256": digest, "bytes": archive.stat().st_size,
+              "source_files": len(records), "session_id": identifier, "purpose": session["purpose"],
+              "code_included": False, "native_binary_included": False,
+              "physical_device_test_completed": False}
+    if profile == WALLET_PROFILE:
+        result.update(profile=profile, origin_vault_included=False, passphrase_included=False)
+    return result
 
 
 def _pairs(items):
@@ -202,10 +281,15 @@ def verify(directory: Path) -> dict:
             or type(manifest.get("session_id")) is not str
             or re.fullmatch(r"[0-9a-f]{32}", manifest["session_id"]) is None):
         raise KitError("Unsupported kit manifest")
+    profile = manifest.get("profile", RECOVERY_PROFILE)
+    source_files = _source_files(profile)
+    transfer_files = {"NOTICE", "transfer/backup.json", "transfer/challenge.json"}
+    if profile == WALLET_PROFILE:
+        transfer_files.add("transfer/wallet-origin.json")
     records = manifest.get("files")
     if type(records) is not dict or not 1 <= len(records) <= 2000:
         raise KitError("Invalid kit file count")
-    if not set(SOURCE_FILES).issubset(records) or not {"NOTICE", "transfer/backup.json", "transfer/challenge.json"}.issubset(records):
+    if not set(source_files).issubset(records) or not transfer_files.issubset(records):
         raise KitError("Required kit sources or transfer files are missing")
     # This command deliberately requires a pristine extraction, before a build
     # or Python imports create extra files. Unlisted .py/.pyc files could shadow
@@ -223,7 +307,7 @@ def verify(directory: Path) -> dict:
     total = 0
     for name, record in records.items():
         _safe_name(name)
-        if (name not in SOURCE_FILES and name not in {"NOTICE", "transfer/backup.json", "transfer/challenge.json"}
+        if (name not in source_files and name not in transfer_files
                 and not any(name.startswith(tree + "/") for tree in SOURCE_TREES)):
             raise KitError("Unexpected source path in manifest")
         if (type(record) is not dict or record.keys() != {"sha256", "bytes"}
@@ -241,18 +325,29 @@ def verify(directory: Path) -> dict:
             or hashlib.sha256(_canonical(challenge)).hexdigest() != manifest.get("challenge_sha256")
             or challenge.get("challenge_id") != manifest["session_id"]):
         raise KitError("Transfer files do not match manifest")
-    return {"verified": True, "session_id": manifest["session_id"], "files": len(records),
-            "bytes": total, "scope": "File integrity only; compare archive SHA256 to the separate origin handoff first"}
+    if profile == WALLET_PROFILE:
+        origin_blob = _read(directory, "transfer/wallet-origin.json", 8192)
+        if hashlib.sha256(origin_blob).hexdigest() != manifest.get("wallet_origin_sha256"):
+            raise KitError("Encrypted-wallet origin fingerprint does not match manifest")
+        origin = json.loads(origin_blob, object_pairs_hook=_pairs)
+        _validate_wallet_origin(origin, manifest, challenge,
+                                {path: records[path]["sha256"] for path in WALLET_SCRIPT_HASHES.values()})
+    result = {"verified": True, "session_id": manifest["session_id"], "files": len(records),
+              "bytes": total, "scope": "File integrity only; compare archive SHA256 to the separate origin handoff first"}
+    if profile == WALLET_PROFILE:
+        result["profile"] = profile
+    return result
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
     build = sub.add_parser("create"); build.add_argument("--session", required=True)
+    build.add_argument("--profile", choices=(RECOVERY_PROFILE, WALLET_PROFILE), default=RECOVERY_PROFILE)
     check = sub.add_parser("verify"); check.add_argument("--directory", type=Path, default=Path.cwd())
     args = parser.parse_args(argv)
     try:
-        result = create(args.session) if args.command == "create" else verify(args.directory)
+        result = create(args.session, profile=args.profile) if args.command == "create" else verify(args.directory)
         print(_canonical(result).decode())
         return 0
     except (ValueError, OSError, RuntimeError, subprocess.SubprocessError, KeyError) as error:

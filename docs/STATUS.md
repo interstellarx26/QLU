@@ -25,6 +25,16 @@ publication inode checking, command-line error redaction, and nonseekable termin
 stream handling. Separate agent review found no remaining blocker for this
 private milestone; that is not a specialist security audit.
 
+An updated [MacBook encrypted-wallet test kit](MACBOOK_WALLET_TEST.md) now adds
+the guided target trial, frozen wallet-source provenance, and a separate origin
+coordinator while preserving the earlier challenge and spending formats. The
+expanded suite passes **196 tests**. A disposable same-host rehearsal passed all
+ten wallet checks and confirmed its returned payment on four nodes; its shortened
+idle wait is explicitly a rehearsal. All nodes stopped afterward. The new physical
+MacBook trial remains pending: it requires human secret entry, the full five-minute
+idle interval, and origin confirmation of the returned `wallet-response.json`.
+The original MacBook result above does not satisfy this updated trial.
+
 Follow-on milestone: [performance baseline](PERFORMANCE.md) now passes locally,
 including an actually connected 256-authorization block and a fresh-process
 offline-response recovery rehearsal. The separate MacBook recovery/spending trial
