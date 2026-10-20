@@ -11,6 +11,9 @@ A fresh, payments-first blockchain project by VibexHQ, with an optional develope
 - [Vibex Developer Cloud business direction](docs/DEVELOPER_CLOUD.md)
 - [Build and private-network guide](docs/FOUNDATION.md)
 - [Current verification and next work](docs/STATUS.md)
+- [Measured private-network performance](docs/PERFORMANCE.md)
+- [MacBook recovery test](docs/MACBOOK_RECOVERY.md)
+- [Cross-platform recovery release gate](docs/RECOVERY_RELEASE_GATE.md)
 - [Pinned upstream provenance](qlu/upstream.json)
 
 ## Local workflow

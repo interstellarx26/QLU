@@ -6,6 +6,19 @@ Date: 2026-10-19 (America/Chicago; verification timestamps continue into 2026-10
 AND Schnorr spending, encrypted recovery, and restored-key spending on four loopback nodes.
 Test coins have no value. Both laboratory networks are stopped after tests.
 
+Follow-on milestone: [performance baseline](PERFORMANCE.md) now passes locally,
+including an actually connected 256-authorization block and a fresh-process
+offline-response recovery rehearsal. The separate MacBook test is prepared through
+[device recovery tooling](MACBOOK_RECOVERY.md); physical completion remains pending.
+Recovery across Mac, native Windows, Linux, iPhone, and Android is now a mandatory
+[release gate](RECOVERY_RELEASE_GATE.md), not an existing support claim.
+The follow-on Python suite passes 106 tests, covering the prior behavior plus the
+offline challenge, coordinator, shared port lock and source-kit integrity. The
+extracted MacBook source kit also builds locally and passes its native self-test
+and 46 packaged recovery tests. It has not yet run on macOS 26.4. Historical counts below
+describe the preceding protocol milestone; C++ consensus code was not changed
+for this follow-on work.
+
 ## Project and scope
 
 - Active project: `$HOME/Developer/QLU`, branch `qlu/main`; the original chat
@@ -78,6 +91,6 @@ existed, and the final test checks no chain files or RPC cookies instead.
 - Host macOS 27 / selected SDK 26.5; locally installed OpenSSL/libevent target macOS 27 and
   generate linker warnings. Local success does not demonstrate compatibility with older Macs.
 
-Next: benchmark and harden this protocol, test independent implementations and a second device,
+Next: harden and broaden the measured protocol, test independent implementations and a second device,
 then design HD/live-key storage and RandomX/economics as separately reviewed milestones.
 The [historical stage-0 report](STATUS-FOUNDATION.md) preserves the earlier foundation evidence.

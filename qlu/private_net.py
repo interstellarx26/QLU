@@ -16,6 +16,7 @@ import time
 import uuid
 
 from devnet import Devnet, DevnetError, RpcError, NODE_COUNT, secure_directory, reject_symlinks, write_private
+from lab import private_port_lock
 from protocol import GENESIS, NETWORK, ROOT, address_for, keytool, script_for, sign_transaction
 from test_framework.messages import CBlock, COutPoint, CTransaction, CTxIn, CTxOut, from_hex
 from test_framework.blocktools import add_witness_commitment
@@ -253,12 +254,13 @@ def main():
     args = parser.parse_args()
     os.umask(0o077)
     controller = QLUPrivateNet()
-    secure_directory(controller.local); secure_directory(controller.data)
-    reject_symlinks(controller.data)
-    fd = os.open(controller.data / "controller.lock", os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
-    with os.fdopen(fd, "r+") as lock:
-        fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        result = getattr(controller, args.command)()
+    with private_port_lock(controller.root):
+        secure_directory(controller.local); secure_directory(controller.data)
+        reject_symlinks(controller.data)
+        fd = os.open(controller.data / "controller.lock", os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(fd, "r+") as lock:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            result = getattr(controller, args.command)()
     print(json.dumps(result, indent=2) if result is not None else f"QLU {args.command} complete.")
 
 

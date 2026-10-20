@@ -141,6 +141,13 @@ cross-implementation vectors, mobile measurements, independent specialist crypto
 and full-node operational review remain release gates. No runtime or security guarantees
 for real-value funds are established by this milestone.
 
+Recovery interoperability is a mandatory release gate across supported Mac, native
+Windows, Linux, iPhone, and Android devices. Minimum supported OS versions and
+platform implementations must be explicitly selected and tested before support is
+claimed. See the [physical-device acceptance matrix](RECOVERY_RELEASE_GATE.md).
+The [performance baseline](PERFORMANCE.md) and [MacBook drill](MACBOOK_RECOVERY.md)
+track the first follow-on measurements without changing these protocol rules.
+
 This construction uses 256-bit commitments and authorization hashes; it does not claim
 ML-DSA-65's security category for every layer. Schnorr is not a second quantum-resistant
 signature. Hybrid signing does not protect compromised devices, stolen backups/codes, scams,
