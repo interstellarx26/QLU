@@ -17,8 +17,8 @@ restored directly to an encrypted vault, and the recovered keys rediscovered
 their output and sent 0.999 test QLU with both signatures. That payment survived
 all four nodes restarting, and all nodes stopped afterward.
 
-This new drill is on one physical Mac. It does not repeat the separate MacBook
-trial or complete cross-platform wallet acceptance. The guided interface is a
+That automated drill is on one physical Mac. It does not complete cross-platform
+wallet acceptance. The guided interface is a
 terminal tool; there is no consumer app or hardware-backed key store yet.
 Three issues caught during implementation were corrected and regression-tested:
 publication inode checking, command-line error redaction, and nonseekable terminal
@@ -30,10 +30,15 @@ the guided target trial, frozen wallet-source provenance, and a separate origin
 coordinator while preserving the earlier challenge and spending formats. The
 expanded suite passes **196 tests**. A disposable same-host rehearsal passed all
 ten wallet checks and confirmed its returned payment on four nodes; its shortened
-idle wait is explicitly a rehearsal. All nodes stopped afterward. The new physical
-MacBook trial remains pending: it requires human secret entry, the full five-minute
-idle interval, and origin confirmation of the returned `wallet-response.json`.
-The original MacBook result above does not satisfy this updated trial.
+idle wait is explicitly a rehearsal. All nodes stopped afterward. The separate
+[MacBook encrypted-wallet trial has now passed its functional checks](MACBOOK_WALLET_RESULT.md):
+the returned file matched its fingerprint, reported all ten wallet checks and
+300.005 seconds of idle time, and produced the exact hybrid-signed payment
+confirmed on all four nodes. All nodes stopped afterward. Target wallet checks
+are self-reported and supported by the user's Terminal transcript; separate
+hardware is user-attested. The code and supplied test passphrase were disclosed
+in chat, so custody/offline-code acceptance remains unmet and these test keys
+are retired. The new kit's MacBook setup-suite report was not supplied.
 
 Follow-on milestone: [performance baseline](PERFORMANCE.md) now passes locally,
 including an actually connected 256-authorization block and a fresh-process

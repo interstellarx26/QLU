@@ -10,7 +10,7 @@ All trials use disposable private-network coins with no monetary value.
 
 | Target | Required execution environment | Current status |
 | --- | --- | --- |
-| Mac, Apple silicon | Native application/tool on physical hardware | First Mac-to-Mac recovery/payment trial passed; full platform acceptance still pending |
+| Mac, Apple silicon | Native application/tool on physical hardware | Recovery/payment and encrypted-wallet functional trials passed; custody and full platform acceptance still pending |
 | Mac, Intel | Native application/tool on physical hardware | Not run |
 | Windows | Native Windows application/tool on physical hardware | Not implemented or run; WSL does not satisfy this row |
 | Linux | Native application/tool on physical hardware; name distribution and architecture | Not run |
@@ -89,7 +89,21 @@ trial above does not test this new vault or interface. Repeat physical-device
 acceptance with newly generated materials, including lock/idle behavior, backup
 readback, direct encrypted restoration, and platform storage protections.
 
-The [updated MacBook source-kit workflow](MACBOOK_WALLET_TEST.md) is prepared for
-that follow-on trial. Its same-host automated rehearsal can shorten the idle
-interval; the physical-device runner and origin validator require 300 seconds.
-Passing a rehearsal or building a package does not complete physical acceptance.
+The [updated MacBook source-kit workflow](MACBOOK_WALLET_TEST.md) was used for
+that [follow-on functional trial](MACBOOK_WALLET_RESULT.md), which passed on
+2026-10-19. Its response matched the transferred fingerprint, reported all ten
+wallet checks and 300.005 seconds of idle time, and produced an exact payment
+confirmed on all four private nodes. Separate hardware is user-attested; target
+wallet checks and timings are self-reported and corroborated by the Terminal
+transcript, not remotely attested.
+
+The recovery code and supplied test passphrase were disclosed in chat at the
+user's request. Those test keys are retired and the challenge is spent. This
+functional result does not pass secret-custody/offline-code acceptance or close
+the full Apple-silicon row. The new kit's MacBook setup/test report was not
+supplied. Target discovery, full storage/negative-case checks, peak memory,
+reverse-direction backup creation and the other platforms remain outstanding.
+
+The same-host automated rehearsal can shorten the idle interval; the
+physical-device runner and origin validator require 300 seconds. Passing a
+rehearsal or building a package does not complete physical acceptance.
