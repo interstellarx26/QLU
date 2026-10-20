@@ -134,6 +134,8 @@ jobs:
         run: python3 qlu/private_net.py smoke
       - name: Exercise encrypted-wallet recovery and confirmed spending
         run: python3 qlu/wallet_smoke.py
+      - name: Exercise wallet-app backup, payment review, and restored spending
+        run: python3 qlu/wallet_app_smoke.py
       - name: Stop only the upstream laboratory's nodes
         if: always()
         run: python3 qlu/devnet.py stop

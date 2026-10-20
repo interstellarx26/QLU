@@ -7,6 +7,30 @@ AND Schnorr spending, encrypted working-wallet storage and recovery, and restore
 spending on four loopback nodes.
 Test coins have no value. Both laboratory networks are stopped after tests.
 
+The first [native Mac wallet app](WALLET_APP.md) is now built locally. It adds
+create/open/recover screens, backup verification, QR receiving, balance discovery,
+explicit payment review, lock controls and private-node startup/shutdown. It uses
+the existing encrypted wallet through private process pipes; no consensus or
+recovery-format changes were made.
+
+**256 Python tests passed** (196 existing plus 32 bridge and 28 network tests).
+A fresh app-bridge drill passed ten checks, including exact payments on four
+nodes, restoration to a fresh encrypted vault after moving the original out of
+its working location, rediscovery, restored spending, restart and cleanup.
+The native UI also opened a disposable encrypted fixture, verified its backup
+through the file picker, displayed the address/QR, received 1 test QLU and
+reviewed/confirmed a 0.1 QLU self-payment with a 0.001 QLU fee. Quitting stopped
+all four nodes.
+
+Review corrected shutdown acknowledgment before cleanup, unclear pending-payment
+presentation, and a focus-loss race during first creation/restoration. A hide
+check did not reliably show a locked window, so explicit hide/minimize handlers
+were added. The final build relocked an unlock request received while the app
+was inactive. Full human foreground hide/minimize, new-wallet backup-code and
+restoration flows remain acceptance work; automated UI fixtures do not establish
+secret custody. This app is tied to the local checkout and dependencies, not a
+portable or notarized release. Source review and local tests are not an audit.
+
 The [encrypted wallet foundation](SECURE_WALLET.md) now passes locally: separate
 daily passphrase and offline recovery code, encrypted vault creation/restoration,
 explicit and idle locking, and guided backup verification. **162 Python tests
@@ -118,6 +142,19 @@ The private run `339af969141e46b683bc0b39f50914ae` completed at
 binary fingerprints. Retained wallet and backup files from this drill are
 encrypted; passphrases and recovery codes were not saved.
 
+Wallet-app evidence: `.local/evidence/verification-summary-wallet-app.json`,
+`python-tests-wallet-app.log`, `wallet-app-latest.json`,
+`wallet-app-native-build.log`, `wallet-app-build.json` and
+`wallet-app-native-ui.json`. The final bridge drill is
+`9af6bce00e444f959d0ff2ba237ba9f2`; its recovered payment is
+`2cd212e4ba7a416a8b528dfa4bf06ae86d50a382f4aed7b26547b249e67bf1fd`.
+The native UI self-payment is
+`7b60db5c91e9ab4dd8d17ef5b6620870c4b44a30b67f8698e8a493d3f79fe036`.
+UI fixtures were disposable, their credentials known to automation, and the
+temporary wallet-picker copy was archived outside the normal app wallet list.
+The app's most recent payment and uncertainty notice are session-only; persistent
+history and automatic reconciliation of unknown outcomes remain future work.
+
 Development failures were retained and corrected: missing OpenSSL test include propagation
 and CMake target scope, a narrowed integer in a test fixture, and a block-rejection test that
 encountered already-processed peer headers. Each node now receives a distinct solved invalid
@@ -138,7 +175,7 @@ existed, and the final test checks no chain files or RPC cookies instead.
   reproducible signed release or independent specialist security audit yet.
 - CI builds the required OpenSSL on Linux and verifies dependency selection before
   Python tests that need the native signer. It also includes the encrypted-wallet
-  private-network drill. It has not been run on hosted CI.
+  and wallet-app private-network drills. It has not been run on hosted CI.
 - Host macOS 27 / selected SDK 26.5; locally installed OpenSSL/libevent target macOS 27 and
   generate linker warnings. Local success does not demonstrate compatibility with older Macs.
 

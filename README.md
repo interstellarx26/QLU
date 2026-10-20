@@ -13,6 +13,7 @@ A fresh, payments-first blockchain project by VibexHQ, with an optional develope
 - [Current verification and next work](docs/STATUS.md)
 - [Measured private-network performance](docs/PERFORMANCE.md)
 - [Encrypted wallet and guided recovery](docs/SECURE_WALLET.md)
+- [Native Mac wallet app](docs/WALLET_APP.md)
 - [MacBook encrypted-wallet test steps](docs/MACBOOK_WALLET_TEST.md)
 - [MacBook encrypted-wallet result](docs/MACBOOK_WALLET_RESULT.md)
 - [MacBook recovery test](docs/MACBOOK_RECOVERY.md)
@@ -32,6 +33,7 @@ python3 -m venv .local/recovery-venv
 .local/recovery-venv/bin/python -m unittest discover -s qlu/tests -v
 .local/recovery-venv/bin/python qlu/private_net.py smoke
 .local/recovery-venv/bin/python qlu/wallet_smoke.py
+.local/recovery-venv/bin/python qlu/wallet_app_smoke.py
 python3 qlu/devnet.py smoke
 ```
 
@@ -42,6 +44,12 @@ Local node data, wallets, credentials, and test evidence are ignored under `.loc
 For the guided encrypted-wallet flow, run `.local/recovery-venv/bin/python qlu/wallet.py`
 yourself in a local terminal. Keep its passphrase and recovery code out of chat and logs.
 This interface is private development tooling, not the consumer wallet app.
+
+For the native Mac interface, build and open the project-bound development app
+with `.local/recovery-venv/bin/python qlu/build_wallet_app.py --open`.
+It adds guided screens, QR receiving, balance discovery, and reviewed test
+payments through the existing encrypted wallet. See the
+[app guide and limits](docs/WALLET_APP.md).
 
 ## Engineering direction
 
