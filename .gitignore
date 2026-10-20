@@ -27,3 +27,7 @@ target/
 /guix-build-*
 
 /ci/scratch/
+
+# QLU local-only node data, wallets, cookies, and test evidence.
+/.local/
+__pycache__/

@@ -1,20 +1,9 @@
-# Security Policy
+# QLU security status
 
-## Supported Versions
+QLU is pre-release research and development. This checkout currently provides an upstream Bitcoin Core regtest laboratory; it has not implemented or independently validated QLU post-quantum consensus.
 
-See our website for versions of Bitcoin Core that are currently supported with
-security updates: https://bitcoincore.org/en/lifecycle/#schedule
+During private development, report QLU-specific concerns directly to the project owner. No dedicated public QLU vulnerability-reporting address or response-time commitment has been established yet. Establish and verify that channel before public release. Do not include private keys, recovery codes, wallet files, or RPC cookies in public issues.
 
-## Reporting a Vulnerability
+For vulnerabilities demonstrably affecting unmodified Bitcoin Core, follow its [upstream security policy](https://github.com/bitcoin/bitcoin/blob/v31.1/SECURITY.md). The preserved [upstream policy](doc/bitcoin-core-SECURITY.md) is reference material, not a QLU reporting contact.
 
-To report security issues send an email to security@bitcoincore.org (not for support).
-
-The following keys may be used to communicate sensitive information to developers:
-
-| Name | Fingerprint |
-|------|-------------|
-| Pieter Wuille | 133E AC17 9436 F14A 5CF1  B794 860F EB80 4E66 9320 |
-| Michael Ford | E777 299F C265 DD04 7930  70EB 944D 35F9 AC3D B76A |
-| Ava Chow | 1528 1230 0785 C964 44D3  334D 1756 5732 E08E 5E41 |
-
-You can import a key by running the following command with that individual’s fingerprint: `gpg --keyserver hkps://keys.openpgp.org --recv-keys "<fingerprint>"` Ensure that you put quotes around fingerprints containing spaces.
+Local tests and source reuse do not constitute an independent audit. The intended release process requires independent review of consensus, cryptographic integration, wallet backup/recovery, and adversarial network behavior.

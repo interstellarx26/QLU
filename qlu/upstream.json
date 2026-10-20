@@ -1,0 +1,14 @@
+{
+  "project": "Bitcoin Core",
+  "repository": "https://github.com/bitcoin/bitcoin.git",
+  "tag": "v31.1",
+  "commit": "9be056a8a72b624dae9623b2f7bded92c2a21c91",
+  "tag_object": "bfa6a4b79cd4c1562fd32857e3147763efae37fb",
+  "release_notes": "https://bitcoincore.org/en/releases/31.1/",
+  "verified_on": "2026-10-19",
+  "verification": "Official GitHub release API, official release index, and annotated tag peeled commit agreed over HTTPS. Maintainer PGP signature not independently authenticated.",
+  "stage": "upstream-regtest-foundation",
+  "qlu_consensus": false,
+  "post_quantum_signatures": false,
+  "randomx_mining": false
+}

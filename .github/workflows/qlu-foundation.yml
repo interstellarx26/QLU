@@ -1,0 +1,48 @@
+name: QLU private-network foundation
+
+on:
+  push:
+    branches: [qlu/main]
+  pull_request:
+    branches: [qlu/main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qlu-foundation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  foundation:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkgconf python3 libboost-dev libevent-dev libsqlite3-dev
+      - name: Install macOS build dependencies
+        if: runner.os == 'macOS'
+        run: brew install cmake boost pkgconf libevent
+      - name: Test controller safety
+        run: python3 -m unittest discover -s qlu/tests -v
+      - name: Build the pinned source
+        run: python3 qlu/build.py build --jobs 2
+      - name: Run registered upstream tests
+        run: python3 qlu/build.py test --jobs 2
+      - name: Exercise four private nodes
+        run: python3 qlu/devnet.py smoke
+      - name: Stop only this laboratory's nodes
+        if: always()
+        run: python3 qlu/devnet.py stop
