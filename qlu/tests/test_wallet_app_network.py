@@ -86,8 +86,11 @@ class FakeController:
         return self.tip
 
     def rpc(self, index, method, *args):
+        if method == "getnetworkinfo":
+            return {"networkactive": True}
         if method == "getpeerinfo":
-            return [{"addr": f"127.0.0.1:{28440 + n}", "subver": f"/QLUWalletApp-{str(n) * 32}/"}
+            return [{"addr": f"127.0.0.1:{28440 + n}", "subver": f"/QLUWalletApp-{str(n) * 32}/",
+                     "bytesrecv_per_msg": {"pong": 29}}
                     for n in range(4) if n != index]
         if method == "getbestblockhash":
             return self.tip
@@ -237,7 +240,8 @@ class AdapterTests(unittest.TestCase):
 
     def test_preview_uses_integer_amounts_and_change_to_sender(self):
         payment = self.begin()
-        self.assertEqual(payment.public(), {"recipient": ADDRESS, "amount": "0.99900000", "fee": "0.00100000", "total": "1.00000000"})
+        self.assertEqual(payment.public(), {"recipient": ADDRESS, "amount": "0.99900000", "fee": "0.00100000", "total": "1.00000000",
+                                            "is_self_transfer": False, "wallet_debit": "1.00000000"})
         self.assertEqual([out.nValue for out in payment.tx.vout], [99_900_000, 100_000_000])
         self.assertEqual(payment.tx.vout[1].scriptPubKey, OWN)
 
@@ -350,7 +354,7 @@ class AdapterTests(unittest.TestCase):
             self.network.send(self.session(), payment)
         self.assertEqual(caught.exception.txid, payment.tx.txid_hex)
         self.assertEqual(caught.exception.receipt["status"], "pending")
-        self.assertIn("Do not send it again", str(caught.exception))
+        self.assertIn("do not create a replacement payment", str(caught.exception))
         self.assertEqual(self.controller.broadcast_calls, 1)
 
     def test_missing_fourth_node_confirmation_is_pending_not_success(self):

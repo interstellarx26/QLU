@@ -31,3 +31,16 @@ target/
 # QLU local-only node data, wallets, cookies, and test evidence.
 /.local/
 __pycache__/
+
+# QLU accidental root-level exports. Test fixtures belong in reviewed source;
+# actual wallets, backup bundles, credentials and responses belong in .local/.
+/.env
+/.env.*
+!/.env.example
+/*.vault.json
+/backup.json
+/QLU-backup-*.json
+/response.json
+/wallet-response.json
+/qlu-recovery-*/
+/qlu-wallet-*/

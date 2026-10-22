@@ -6,6 +6,7 @@ cannot guarantee erasure of secret strings or protect a compromised process/OS.
 """
 from __future__ import annotations
 
+import hashlib
 import hmac
 import math
 import os
@@ -25,6 +26,7 @@ from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import protocol
 import recovery
+import backup_verification
 
 
 MAX_VAULT_BYTES = 8192
@@ -32,10 +34,16 @@ KDF = {"name": "Argon2id", "memory_kib": 65536, "iterations": 3, "lanes": 4, "le
 HEADER_FIELDS = {"format", "version", "cipher", "kdf", "salt", "nonce",
                  "network_id", "genesis_hash", "policy"}
 AAD_DOMAIN = b"QLU local vault v1 / authenticated header\x00"
+VERIFICATION_KEY_DOMAIN = b"QLU local backup verification v1 / HMAC-SHA256 key\x00"
+VERIFICATION_MAC_DOMAIN = b"QLU local backup verification v1 / authenticated receipt\x00"
 
 
 class VaultError(ValueError):
     """An operation failed without exposing secret or backend details."""
+
+
+class VaultChangedError(VaultError):
+    """The selected encrypted bytes changed; explicit selection is required."""
 
 
 def _passphrase(value: str) -> bytes:
@@ -179,6 +187,7 @@ class WalletSession:
         self._idle_seconds = float(idle_seconds)
         self._mutex = threading.RLock()
         self._wallet = None
+        self._vault_digest = None
         self._timer = None
         self._deadline = 0.0
         self._generation = 0
@@ -192,6 +201,7 @@ class WalletSession:
             self._timer.cancel()
         self._timer = None
         self._wallet = None
+        self._vault_digest = None
         self._deadline = 0.0
 
     def _schedule_locked(self, delay, generation):
@@ -222,13 +232,23 @@ class WalletSession:
         with self._mutex:
             self._lock_locked()
 
+    @property
+    def vault_digest(self):
+        """Public identity of the exact encrypted blob authenticated this session."""
+        with self._mutex:
+            if self.locked:
+                return None
+            return self._vault_digest
+
     @classmethod
     def _store(cls, path, wallet, encoded_passphrase, idle_seconds):
         session = cls(path, idle_seconds=idle_seconds)
         try:
-            _publish(session._path, _encrypt(wallet, encoded_passphrase))
+            blob = _encrypt(wallet, encoded_passphrase)
+            _publish(session._path, blob)
             with session._mutex:
                 session._wallet = _wallet_identity(wallet)
+                session._vault_digest = hashlib.sha256(blob).hexdigest()
                 session._touch_locked()
             return session
         except BaseException:
@@ -253,15 +273,28 @@ class WalletSession:
         except Exception:
             raise VaultError("Vault restoration failed") from None
 
-    def unlock(self, passphrase):
+    def unlock(self, passphrase, *, expected_digest=None):
         with self._mutex:
             self._lock_locked()  # Failed re-unlock must never retain old authority.
             try:
+                if expected_digest is not None and (
+                        type(expected_digest) is not str or len(expected_digest) != 64
+                        or any(character not in "0123456789abcdef" for character in expected_digest)):
+                    raise VaultError("Invalid selected vault identity")
                 encoded = _passphrase(passphrase)
-                self._wallet = _decrypt(recovery.read_private(self._path, MAX_VAULT_BYTES), encoded)
+                blob = recovery.read_private(self._path, MAX_VAULT_BYTES)
+                digest = hashlib.sha256(blob).hexdigest()
+                if expected_digest is not None and not hmac.compare_digest(digest, expected_digest):
+                    raise VaultChangedError("The selected wallet file changed")
+                self._wallet = _decrypt(blob, encoded)
+                # Do not reread the file: a replacement after decryption must
+                # not substitute a different identity into a trusted receipt.
+                self._vault_digest = digest
                 self._touch_locked()
             except BaseException as error:
                 self._lock_locked()
+                if isinstance(error, VaultChangedError):
+                    raise
                 if isinstance(error, Exception):
                     raise VaultError("Vault unlock failed") from None
                 raise
@@ -309,3 +342,39 @@ class WalletSession:
                 raise VaultError("Backup belongs to a different wallet")
             return True
         return self._operate(verify)
+
+    @staticmethod
+    def _verification_mac(wallet, header):
+        key = hmac.digest(bytes.fromhex(wallet["master_seed"]), VERIFICATION_KEY_DOMAIN, "sha256")
+        return hmac.new(key, VERIFICATION_MAC_DOMAIN + recovery._canonical(header), "sha256").hexdigest()
+
+    def create_verification_receipt(self, blob, code):
+        """Record successful recovery for this exact vault without retaining its code."""
+        def create(wallet):
+            restored = recovery.restore_backup(blob, code, protocol.NETWORK, protocol.GENESIS)
+            if not hmac.compare_digest(recovery._canonical(restored), recovery._canonical(wallet)):
+                raise VaultError("Backup belongs to a different wallet")
+            header = {
+                "format": "qlu-backup-verification", "version": 1,
+                "network_id": protocol.NETWORK, "genesis_hash": protocol.GENESIS,
+                "policy": recovery.POLICY, "vault_sha256": self._vault_digest,
+                "wallet_commitment": self._public(wallet)["key_commitment"],
+                "backup_sha256": hashlib.sha256(blob).hexdigest(), "verified_at": int(time.time()),
+            }
+            receipt = recovery._canonical({**header, "hmac_sha256": self._verification_mac(wallet, header)})
+            backup_verification.validate_receipt(receipt, self._vault_digest)
+            return receipt
+        return self._operate(create)
+
+    def accept_verification_receipt(self, receipt_bytes):
+        """Authenticate existing proof only after unlocking; mismatch is never trust."""
+        def accept(wallet):
+            try:
+                receipt = backup_verification.validate_receipt(receipt_bytes, self._vault_digest)
+                header = {name: value for name, value in receipt.items() if name != "hmac_sha256"}
+                if not hmac.compare_digest(receipt["wallet_commitment"], self._public(wallet)["key_commitment"]):
+                    return False
+                return hmac.compare_digest(receipt["hmac_sha256"], self._verification_mac(wallet, header))
+            except Exception:
+                return False
+        return self._operate(accept)

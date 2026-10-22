@@ -2,6 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stderr, redirect_stdout
 import copy
+import hashlib
 import io
 import json
 import os
@@ -113,6 +114,63 @@ class VaultTests(unittest.TestCase):
         self.assertNotIn(wrong, str(error.exception))
         self.session.unlock(PASSPHRASE)
         self.assertFalse(self.session.locked)
+
+    def test_selected_blob_mismatch_locks_before_decryption(self):
+        self.unlocked()
+        with patch.object(vault, "_decrypt") as decrypt:
+            with self.assertRaises(vault.VaultChangedError) as error:
+                self.session.unlock(PASSPHRASE, expected_digest="00" * 32)
+            decrypt.assert_not_called()
+        self.assertTrue(self.session.locked)
+        self.assertIsNone(self.session.vault_digest)
+        self.assertNotIn(PASSPHRASE, str(error.exception))
+
+    def test_selected_digest_is_not_authentication(self):
+        digest = hashlib.sha256(self.encrypted).hexdigest()
+        with self.assertRaises(vault.VaultError):
+            self.session.unlock("wrong password sufficiently long", expected_digest=digest)
+        self.assertTrue(self.session.locked)
+        self.session.unlock(PASSPHRASE, expected_digest=digest)
+        self.assertEqual(self.session.vault_digest, digest)
+        self.assertEqual(self.session.public_keys(), vault.protocol.keytool(self.wallet))
+
+    def test_invalid_selection_pins_fail_before_read_or_decrypt(self):
+        for value in (False, 1, [], {}, "", "00" * 31, "AB" * 32, "x" * 64):
+            with self.subTest(kind=type(value).__name__), \
+                    patch.object(vault.recovery, "read_private") as read, \
+                    patch.object(vault, "_decrypt") as decrypt:
+                with self.assertRaises(vault.VaultError):
+                    self.session.unlock(PASSPHRASE, expected_digest=value)
+                read.assert_not_called()
+                decrypt.assert_not_called()
+                self.assertTrue(self.session.locked)
+
+    def test_path_replacement_during_decryption_cannot_substitute_authenticated_identity(self):
+        original = vault._decrypt
+        replacement_wallet = vault.recovery.generate_wallet(vault.protocol.NETWORK, vault.protocol.GENESIS)
+        replacement = vault._encrypt(replacement_wallet, PASSPHRASE.encode())
+        digest = hashlib.sha256(self.encrypted).hexdigest()
+        def replace_after_authentication(blob, phrase):
+            result = original(blob, phrase)
+            self.path.write_bytes(replacement)
+            return result
+        with patch.object(vault, "_decrypt", side_effect=replace_after_authentication):
+            self.session.unlock(PASSPHRASE, expected_digest=digest)
+        self.assertEqual(self.session.vault_digest, digest)
+        self.assertEqual(self.session.public_keys(), vault.protocol.keytool(self.wallet))
+        self.assertNotEqual(self.session.public_keys(), vault.protocol.keytool(replacement_wallet))
+        self.session.lock()
+        with self.assertRaises(vault.VaultChangedError):
+            self.session.unlock(PASSPHRASE, expected_digest=digest)
+
+    def test_identical_private_copy_keeps_content_selection(self):
+        digest = hashlib.sha256(self.encrypted).hexdigest()
+        replacement = self.root / "copy.qlu"
+        replacement.write_bytes(self.encrypted)
+        replacement.chmod(0o600)
+        os.replace(replacement, self.path)
+        self.session.unlock(PASSPHRASE, expected_digest=digest)
+        self.assertEqual(self.session.vault_digest, digest)
 
     def test_passphrase_policy_rejects_before_kdf_and_creates_no_file(self):
         values = ("short", "x" * 1025, "é" * 513, "QLU1-" + "a" * 40,

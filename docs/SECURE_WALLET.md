@@ -47,6 +47,10 @@ signatures, or portable recovery format. It is not a public wallet release.
   verify recovery before showing the receiving address. Interrupted setup can
   resume through the existing encrypted vault's backup action. Verification
   proves that those materials match; it cannot prove safe offline storage.
+  The native Mac app can remember that completed check using an authenticated
+  local receipt tied to the exact encrypted vault. Correct passphrase unlock
+  authenticates the receipt before opening the backup gate. The vault and
+  portable recovery formats are unchanged. See the [receipt design and limits](WALLET_APP.md#remembered-backup-verification).
 - **Recovery:** choose the encrypted backup, enter the recovery code privately,
   and select a new daily passphrase. No source computer, VibexHQ account, company
   master key, weaker signature, or password-reset service is involved. Restoring

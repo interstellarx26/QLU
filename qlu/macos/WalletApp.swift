@@ -6,16 +6,16 @@ import CoreImage.CIFilterBuiltins
 import UniformTypeIdentifiers
 
 private enum Palette {
-    static let ink = Color(red: 0.047, green: 0.086, blue: 0.118)
-    static let panel = Color(red: 0.078, green: 0.125, blue: 0.157)
-    static let border = Color.white.opacity(0.10)
-    static let mint = Color(red: 0.65, green: 0.91, blue: 0.78)
-    static let ivory = Color(red: 0.94, green: 0.95, blue: 0.91)
-    static let muted = Color(red: 0.60, green: 0.67, blue: 0.69)
+    static let ink = Color(red: 7/255, green: 10/255, blue: 9/255)
+    static let panel = Color(red: 16/255, green: 32/255, blue: 25/255)
+    static let border = Color(red: 208/255, green: 182/255, blue: 129/255).opacity(0.18)
+    static let gold = Color(red: 208/255, green: 182/255, blue: 129/255)
+    static let ivory = Color(red: 243/255, green: 240/255, blue: 233/255)
+    static let muted = Color(red: 170/255, green: 181/255, blue: 172/255)
     static let amber = Color(red: 0.97, green: 0.77, blue: 0.46)
 }
 
-private struct BridgeFailure: Error {
+struct BridgeFailure: Error {
     let code: String
     let message: String
     let txid: String?
@@ -25,8 +25,21 @@ private struct BridgeFailure: Error {
         txid: nil)
 }
 
+protocol WalletBridgeClient {
+    func request(_ command: String, _ params: [String: Any],
+                 completion: @escaping (Result<[String: Any], BridgeFailure>) -> Void)
+    func shutdown(completion: @escaping (Result<Void, BridgeFailure>) -> Void)
+}
+
+extension WalletBridgeClient {
+    func request(_ command: String,
+                 completion: @escaping (Result<[String: Any], BridgeFailure>) -> Void) {
+        request(command, [:], completion: completion)
+    }
+}
+
 /// A single serial pipe, never a shell. Every response must fit one bounded JSON line.
-private final class WalletBridge: @unchecked Sendable {
+final class WalletBridge: WalletBridgeClient, @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.vibexhq.qlu.private-wallet")
     private let guardLock = NSLock()
     private var process: Process?
@@ -124,17 +137,19 @@ private final class WalletBridge: @unchecked Sendable {
                 }
             } catch {
                 terminate()
-                let failure: BridgeFailure
-                if command == "confirm_send" || command == "faucet" {
-                    failure = BridgeFailure(code: "payment_unknown",
-                        message: "The wallet service stopped responding after payment authorization. The payment may have been submitted. Do not repeat it.",
-                        txid: nil)
-                } else {
-                    failure = .unavailable
-                }
+                let failure = Self.transportFailure(for: command)
                 DispatchQueue.main.async { completion(.failure(failure)) }
             }
         }
+    }
+
+    static func transportFailure(for command: String) -> BridgeFailure {
+        if command == "confirm_send" || command == "confirm_resume" || command == "faucet" {
+            return BridgeFailure(code: "payment_unknown",
+                message: "The wallet service stopped responding after payment authorization. The payment may have been submitted. Do not repeat it.",
+                txid: nil)
+        }
+        return .unavailable
     }
 
     func terminate() {
@@ -161,31 +176,45 @@ private final class WalletBridge: @unchecked Sendable {
     }
 }
 
-private struct WalletState {
+struct WalletState {
     var walletOpen = false
     var locked = true
     var backupVerified = false
+    var backupVerificationStatus = "unchecked"
     var address: String?
     var walletPath: String?
     var networkRunning = false
+    var networkHealthy = false
     var balance: String?
     var immatureBalance: String?
     var recentPayment: [String: Any]?
+    var paymentHistory: [[String: Any]] = []
+    var historyLoaded = false
+    var historyCount = 0
+    var paymentBlocked = false
+    var pendingPayment: [String: Any]?
 
     init(_ value: [String: Any] = [:]) {
         walletOpen = value["wallet_open"] as? Bool ?? false
         locked = value["locked"] as? Bool ?? true
         backupVerified = value["backup_verified"] as? Bool ?? false
+        backupVerificationStatus = value["backup_verification_status"] as? String ?? "unchecked"
         address = value["address"] as? String
         walletPath = value["wallet_path"] as? String
         networkRunning = value["network_running"] as? Bool ?? false
+        networkHealthy = value["network_healthy"] as? Bool ?? false
         balance = value["balance"] as? String
         immatureBalance = value["immature_balance"] as? String
         recentPayment = value["recent_payment"] as? [String: Any]
+        paymentHistory = value["payment_history"] as? [[String: Any]] ?? []
+        historyLoaded = value["history_loaded"] as? Bool ?? false
+        historyCount = value["history_count"] as? Int ?? 0
+        paymentBlocked = value["payment_blocked"] as? Bool ?? false
+        pendingPayment = value["pending_payment"] as? [String: Any]
     }
 }
 
-private enum Destination: String, CaseIterable {
+enum Destination: String, CaseIterable {
     case wallet = "Wallet", receive = "Receive", send = "Send", backup = "Backup"
     var symbol: String {
         switch self {
@@ -197,13 +226,13 @@ private enum Destination: String, CaseIterable {
     }
 }
 
-private enum WalletSheet: String, Identifiable {
+enum WalletSheet: String, Identifiable {
     case create, recover, unlock, open
     var id: String { rawValue }
 }
 
 @MainActor
-private final class WalletModel: ObservableObject {
+final class WalletModel: ObservableObject {
     @Published var state = WalletState()
     @Published var destination = Destination.wallet
     @Published var sheet: WalletSheet?
@@ -222,29 +251,71 @@ private final class WalletModel: ObservableObject {
     @Published var restorePath = ""
     @Published var recipient = ""
     @Published var amount = ""
+    @Published var incomingTransaction = ""
     @Published var preview: [String: Any]?
     @Published var privacyLocked = false
     @Published var cleanupWaiting = false
     @Published var codeAcknowledged = false
-    private let bridge = WalletBridge()
+    @Published private(set) var pendingBackupPath: String?
+    @Published private(set) var recoveryCodeWasHidden = false
+    @Published private(set) var recoveryCodeCovered = false
+    private let bridge: any WalletBridgeClient
+    private let isApplicationActive: @MainActor () -> Bool
     private var polling: Timer?
     private var panelIsOpen = false
-    private var lockAfterPanel = false
+    private var focusGeneration = 0
     private var privacyGeneration = 0
+    private var walletGeneration = 0
     private var quitting = false
     private var quitAttempt = 0
     private var backendClosed = false
 
     var isLocked: Bool { state.locked || privacyLocked }
+    var hasRecoveryCode: Bool { !isLocked && !recoveryCode.isEmpty }
+    var isRecoveryCodeVisible: Bool {
+        hasRecoveryCode && !recoveryCodeCovered && isApplicationActive()
+    }
     var canUseWallet: Bool { state.walletOpen && !isLocked && state.backupVerified }
+    var canSubmitPayment: Bool {
+        canUseWallet && state.networkRunning && state.networkHealthy && !paymentUncertain
+    }
+    func canReviewResume(_ operationID: String) -> Bool {
+        guard canUseWallet, state.networkRunning, state.historyLoaded else { return false }
+        return resumeRecord(operationID) != nil
+    }
+    private func resumeRecord(_ operationID: String) -> [String: Any]? {
+        let entries = state.paymentHistory + (state.pendingPayment.map { [$0] } ?? [])
+        return entries.first {
+            $0["operation_id"] as? String == operationID && $0["resume_available"] as? Bool == true
+                && $0["status"] as? String == "pending" && $0["kind"] as? String != "receive"
+        }
+    }
+    private var resumePreviewMatchesHistory: Bool {
+        guard let preview, preview["resume_id"] is String,
+              let operation = preview["operation_id"] as? String,
+              let record = resumeRecord(operation) else { return false }
+        return ["txid", "recipient", "amount", "fee"].allSatisfy {
+            preview[$0] as? String == record[$0] as? String
+        }
+    }
+    var canConfirmResume: Bool {
+        canUseWallet && state.networkRunning && state.networkHealthy && resumePreviewMatchesHistory
+    }
+
     var passphraseValid: Bool {
         passphrase.count >= 15 && passphrase.utf8.count <= 1024 && passphrase == confirmation
     }
 
-    init() {
-        refreshStatus()
-        loadWallets()
-        startPolling()
+    init(bridge: any WalletBridgeClient = WalletBridge(),
+         isApplicationActive: @escaping @MainActor () -> Bool = { NSApplication.shared.isActive },
+         startServices: Bool = true) {
+        self.bridge = bridge
+        self.isApplicationActive = isApplicationActive
+        if startServices {
+            refreshStatus()
+            loadWallets()
+            startPolling()
+        }
     }
 
     private func startPolling() {
@@ -264,17 +335,29 @@ private final class WalletModel: ObservableObject {
         busyMessage = message
         error = nil
         notice = nil
+        let wallet = walletGeneration
         bridge.request(command, params) { [weak self] result in
             guard let self, !self.quitting else { return }
             self.busy = false
             self.busyMessage = ""
+            guard wallet == self.walletGeneration else { return }
             switch result {
             case .success(let result): completion(result)
             case .failure(let failure):
+                if self.handleWalletIdentityFailure(failure) {
+                    self.refreshStatus()
+                    return
+                }
                 self.error = failure.message
+                self.applyNetworkFailure(failure)
+                if ["payment_conflicted", "resume_unavailable", "resume_invalid"].contains(failure.code) {
+                    self.preview = nil
+                }
                 if failure.code == "payment_pending" || failure.code == "payment_unknown" {
                     self.paymentUncertain = true
-                    self.pendingTXID = failure.txid
+                    // Resume already knows the original transaction. A broken
+                    // pipe cannot supply a new ID and must not erase that reference.
+                    self.pendingTXID = failure.txid ?? self.pendingTXID
                     self.preview = nil
                     self.error = "Confirmation is uncertain. Keep this transaction ID if available; do not repeat this payment."
                 }
@@ -286,7 +369,19 @@ private final class WalletModel: ObservableObject {
     private func apply(_ result: [String: Any]) {
         let wasLocked = state.locked
         state = WalletState(result)
-        if state.recentPayment?["status"] as? String == "pending" {
+        if !state.networkRunning || !state.networkHealthy {
+            invalidateNetworkCheck()
+        }
+        if state.historyLoaded {
+            paymentUncertain = state.paymentBlocked
+            pendingTXID = state.pendingPayment?["txid"] as? String
+                ?? state.paymentHistory.first(where: {
+                    $0["status"] as? String == "pending" && $0["kind"] as? String != "receive"
+                })?["txid"] as? String
+            if paymentUncertain && !resumePreviewMatchesHistory { preview = nil }
+            if preview?["resume_id"] != nil && !resumePreviewMatchesHistory { preview = nil }
+        } else if state.recentPayment?["status"] as? String == "pending",
+                  state.recentPayment?["kind"] as? String != "receive" {
             paymentUncertain = true
             pendingTXID = state.recentPayment?["txid"] as? String
         }
@@ -294,14 +389,65 @@ private final class WalletModel: ObservableObject {
         // into the unlock/create sheet. Only a new lock transition clears inputs.
         if state.locked && !wasLocked { clearSecrets() }
         if state.locked {
-            recoveryCode = ""
+            hideRecoveryCode()
             preview = nil
         }
-        // An unlock-producing request may finish after the app lost focus. Keep
-        // the UI covered and serialize a lock after that result as a backstop,
-        // including first-time create/restore before walletOpen becomes true.
-        if state.walletOpen && !state.locked && !NSApplication.shared.isActive && !quitting {
+    }
+
+    @discardableResult
+    private func handleWalletIdentityFailure(_ failure: BridgeFailure) -> Bool {
+        guard failure.code == "wallet_changed" else { return false }
+        // A changed selection is no longer the wallet shown on screen. Invalidate
+        // pending callbacks before removing its public data and approvals.
+        privacyGeneration += 1
+        focusGeneration += 1
+        privacyLocked = true
+        resetBackupFlow()
+        clearSecrets()
+        recoveryCodeCovered = true
+        state = WalletState(["network_running": state.networkRunning])
+        paymentUncertain = false
+        pendingTXID = nil
+        backupPath = ""
+        restorePath = ""
+        recipient = ""
+        amount = ""
+        sheet = nil
+        destination = .wallet
+        notice = nil
+        error = "The selected wallet file changed. Wallet access is closed. Open the wallet file again to check its own identity and payment history."
+        return true
+    }
+
+    private func invalidateNetworkCheck() {
+        state.networkHealthy = false
+        state.balance = nil
+        state.immatureBalance = nil
+        preview = nil
+    }
+
+    private func applyNetworkFailure(_ failure: BridgeFailure) {
+        let failures: Set<String> = [
+            "unavailable", "network_error", "network_stopped", "start_failed", "cleanup_failed",
+            "network_identity", "balance_failed", "stale_payment", "faucet_failed",
+            "payment_rejected", "incoming_unavailable", "payment_pending", "payment_unknown",
+            "wallet_failed", "internal_error", "history_unavailable", "insufficient_funds",
+        ]
+        if failures.contains(failure.code) { invalidateNetworkCheck() }
+    }
+
+    private func applyAccessResult(_ result: [String: Any], generation: Int) {
+        // Create, restore and unlock can finish after an explicit lock or sleep.
+        // Cover first and serialize another lock even if an older lock reply has
+        // already arrived. Ordinary focus changes do not change this generation.
+        if generation != privacyGeneration {
+            privacyLocked = true
+            apply(result)
             lock()
+        } else {
+            apply(result)
+            privacyLocked = false
+            if recoveryCodeCovered && isApplicationActive() { becomeActive() }
         }
     }
 
@@ -309,16 +455,42 @@ private final class WalletModel: ObservableObject {
         passphrase = ""
         confirmation = ""
         recoveryInput = ""
-        recoveryCode = ""
+        incomingTransaction = ""
+        hideRecoveryCode()
         preview = nil
     }
 
+    private func hideRecoveryCode() {
+        if !recoveryCode.isEmpty && !codeAcknowledged {
+            recoveryCodeWasHidden = true
+            notice = hiddenCodeMessage
+        }
+        recoveryCode = ""
+    }
+
+    private func resetBackupFlow() {
+        walletGeneration += 1
+        pendingBackupPath = nil
+        hideRecoveryCode()
+        codeAcknowledged = false
+        recoveryCodeWasHidden = false
+    }
+
+    private var hiddenCodeMessage: String {
+        "The recovery code was hidden when the wallet locked or this step closed. If you did not write it down, save a new backup with a new filename."
+    }
+
     func refreshStatus() {
+        let generation = privacyGeneration
+        let wallet = walletGeneration
         bridge.request("status") { [weak self] result in
-            guard let self, !self.quitting else { return }
+            guard let self, !self.quitting, generation == self.privacyGeneration,
+                  wallet == self.walletGeneration else { return }
             switch result {
             case .success(let state): self.apply(state)
             case .failure(let failure):
+                if self.handleWalletIdentityFailure(failure) { return }
+                self.applyNetworkFailure(failure)
                 if !self.paymentUncertain { self.error = failure.message }
             }
         }
@@ -346,13 +518,24 @@ private final class WalletModel: ObservableObject {
         recoveryInput = ""
     }
 
+    func sheetDidDismiss() {
+        // Ordinary credential sheets do not own the recovery-code overlay.
+        // A stale binding reset or dismissal must never erase a new code.
+        guard sheet == nil else { return }
+        passphrase = ""
+        confirmation = ""
+        recoveryInput = ""
+    }
+
     func create() {
+        resetBackupFlow()
+        let generation = privacyGeneration
         let parameters = ["passphrase": passphrase, "confirmation": confirmation]
         passphrase = ""
         confirmation = ""
         perform("create", params: parameters, message: "Creating your encrypted wallet…") { [weak self] result in
             guard let self else { return }
-            self.apply(result)
+            self.applyAccessResult(result, generation: generation)
             self.dismissSheet()
             self.destination = .backup
             self.backupPath = ""
@@ -363,6 +546,8 @@ private final class WalletModel: ObservableObject {
     }
 
     func restore() {
+        resetBackupFlow()
+        let generation = privacyGeneration
         let parameters = ["backup_path": restorePath, "code": recoveryInput,
                           "passphrase": passphrase, "confirmation": confirmation]
         passphrase = ""
@@ -370,7 +555,7 @@ private final class WalletModel: ObservableObject {
         recoveryInput = ""
         perform("restore", params: parameters, message: "Restoring into a new encrypted wallet…") { [weak self] result in
             guard let self else { return }
-            self.apply(result)
+            self.applyAccessResult(result, generation: generation)
             self.dismissSheet()
             self.destination = .wallet
             self.notice = "Wallet recovered. Your existing wallet files were preserved."
@@ -379,6 +564,7 @@ private final class WalletModel: ObservableObject {
     }
 
     func openWallet(_ path: String) {
+        resetBackupFlow()
         clearSecrets()
         perform("open", params: ["path": path], message: "Opening your wallet…") { [weak self] result in
             guard let self else { return }
@@ -387,7 +573,7 @@ private final class WalletModel: ObservableObject {
             self.destination = .wallet
             self.backupPath = ""
             self.codeAcknowledged = false
-            self.notice = "Wallet opened and locked. Unlock it, then verify your saved backup."
+            self.notice = "Wallet opened and locked. Enter your passphrase to continue."
         }
     }
 
@@ -397,49 +583,93 @@ private final class WalletModel: ObservableObject {
         let generation = privacyGeneration
         perform("unlock", params: parameters, message: "Unlocking your wallet…") { [weak self] result in
             guard let self else { return }
-            self.apply(result)
-            if self.privacyGeneration == generation && NSApplication.shared.isActive {
-                self.privacyLocked = false
-            }
+            self.applyAccessResult(result, generation: generation)
             self.dismissSheet()
-            if !self.state.backupVerified { self.destination = .backup }
+            if !self.isLocked {
+                if self.state.backupVerified {
+                    self.destination = .wallet
+                    self.notice = "Wallet unlocked. Your earlier backup verification is remembered on this Mac."
+                } else {
+                    self.destination = .backup
+                    self.notice = self.state.backupVerificationStatus == "unavailable"
+                        ? "Your saved verification could not be checked. Verify your backup again."
+                        : "Verify your saved backup once to remember the check on this Mac."
+                }
+            }
+            if self.pendingBackupPath != nil && !self.isLocked {
+                self.destination = .backup
+                self.notice = "Your backup has not been saved yet. Choose Create backup and show code to continue."
+            } else if self.recoveryCodeWasHidden && !self.isLocked {
+                self.destination = .backup
+                self.notice = self.hiddenCodeMessage
+            }
         }
     }
 
     func lock() {
         privacyGeneration += 1
-        let generation = privacyGeneration
         privacyLocked = true
         clearSecrets()
         sheet = nil
+        let wallet = walletGeneration
         bridge.request("lock") { [weak self] result in
-            guard let self else { return }
+            guard let self, !self.quitting, wallet == self.walletGeneration else { return }
+            if case .failure(let failure) = result {
+                self.handleWalletIdentityFailure(failure)
+            }
             if case .success(let state) = result {
                 self.apply(state)
-                if self.privacyGeneration == generation && self.state.locked {
-                    self.privacyLocked = false
-                }
+                // Stay locally locked until a new, explicit access request
+                // succeeds. A stale public status cannot reopen the wallet.
             }
         }
     }
 
     func resignActive() {
+        focusGeneration += 1
+        recoveryCodeCovered = true
         guard !quitting && !cleanupWaiting else {
             clearSecrets()
             return
         }
-        if panelIsOpen {
-            lockAfterPanel = true
-        } else {
-            lock()
+    }
+
+    func becomeActive() {
+        guard !quitting, !cleanupWaiting, !panelIsOpen, isApplicationActive() else { return }
+        focusGeneration += 1
+        let focus = focusGeneration
+        let generation = privacyGeneration
+        let wallet = walletGeneration
+        recoveryCodeCovered = true
+        // A fresh public status check observes the backend's real idle deadline;
+        // it does not unlock the wallet or extend that deadline.
+        bridge.request("status") { [weak self] result in
+            guard let self, !self.quitting, !self.cleanupWaiting,
+                  self.isApplicationActive(), focus == self.focusGeneration,
+                  generation == self.privacyGeneration, wallet == self.walletGeneration else { return }
+            switch result {
+            case .success(let state):
+                self.apply(state)
+                self.recoveryCodeCovered = false
+            case .failure(let failure):
+                // Without an authoritative status result, keep the secret covered.
+                if self.handleWalletIdentityFailure(failure) { return }
+                self.applyNetworkFailure(failure)
+                self.error = failure.message
+            }
         }
+    }
+
+    func beginFilePanel() {
+        panelIsOpen = true
     }
 
     private func finishPanel() {
         panelIsOpen = false
-        if lockAfterPanel || !NSApplication.shared.isActive {
-            lockAfterPanel = false
-            lock()
+        // A native file panel may consume the activation notification. Recheck
+        // on its return so a valid code is not left covered indefinitely.
+        if recoveryCodeCovered && isApplicationActive() {
+            becomeActive()
         }
     }
 
@@ -449,7 +679,7 @@ private final class WalletModel: ObservableObject {
         panel.allowedContentTypes = [.json]
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panelIsOpen = true
+        beginFilePanel()
         let accepted = panel.runModal() == .OK
         if accepted, let url = panel.url {
             if toRestore { restorePath = url.path } else { backupPath = url.path }
@@ -463,7 +693,7 @@ private final class WalletModel: ObservableObject {
         panel.allowedContentTypes = [.json]
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panelIsOpen = true
+        beginFilePanel()
         let accepted = panel.runModal() == .OK
         let path = accepted ? panel.url?.path : nil
         finishPanel()
@@ -471,44 +701,93 @@ private final class WalletModel: ObservableObject {
     }
 
     func createBackup() {
+        guard !busy, !quitting else { return }
         let panel = NSSavePanel()
         panel.title = "Save an encrypted QLU backup"
         panel.nameFieldStringValue = "QLU-backup-\(Int(Date().timeIntervalSince1970)).json"
         panel.allowedContentTypes = [.json]
         panel.canCreateDirectories = true
-        panel.message = "Keep a copy somewhere safe. Your separate recovery code is needed to use it."
-        panelIsOpen = true
+        panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        panel.message = "After saving, QLU will show a new recovery code. Write down the whole code before choosing I saved my code."
+        beginFilePanel()
         let accepted = panel.runModal() == .OK
         let path = accepted ? panel.url?.path : nil
+        finishBackupSelection(path)
+    }
+
+    func finishBackupSelection(_ path: String?) {
         finishPanel()
-        guard let path, !isLocked else { return }
+        pendingBackupPath = path
+        guard path != nil else { return }
+        destination = .backup
+        if isLocked {
+            notice = "Your backup has not been saved yet. The wallet locked while the Save window was open. Unlock it, then choose Create backup and show code."
+            return
+        }
+        if !isApplicationActive() {
+            notice = "Your backup has not been saved yet. Return to QLU, then choose Create backup and show code."
+            return
+        }
+        continueBackup()
+    }
+
+    func cancelPendingBackup() {
+        pendingBackupPath = nil
+        notice = "Backup cancelled. No new backup was saved."
+    }
+
+    func continueBackup() {
+        guard !busy, !quitting, let path = pendingBackupPath else { return }
+        guard !isLocked, isApplicationActive() else {
+            notice = "Unlock your wallet in QLU to create this backup and see its recovery code."
+            return
+        }
+        // Consume before submitting: never automatically retry a path that may
+        // already have been written. The backend still refuses all overwrites.
+        pendingBackupPath = nil
         let generation = privacyGeneration
+        let wallet = walletGeneration
         perform("backup_create", params: ["backup_path": path], message: "Saving your encrypted backup…") { [weak self] result in
-            guard let self else { return }
+            guard let self, wallet == self.walletGeneration else { return }
             self.backupPath = result["backup_path"] as? String ?? path
             self.codeAcknowledged = false
-            if generation == self.privacyGeneration, !self.isLocked {
-                self.recoveryCode = result["code"] as? String ?? ""
+            if generation == self.privacyGeneration, !self.isLocked,
+               let code = result["code"] as? String, code.hasPrefix("QLU1-") {
+                self.recoveryCode = code
+                if !self.isApplicationActive() { self.recoveryCodeCovered = true }
+                self.recoveryCodeWasHidden = false
+                self.destination = .backup
+                self.sheet = nil
             } else {
-                self.notice = "Backup saved, but its code was hidden when the app locked. Unlock and create a new backup."
+                self.recoveryCodeWasHidden = true
+                self.notice = "Backup saved, but the wallet locked before its recovery code could be shown. Unlock and save a new backup with a new filename."
             }
         }
     }
 
     func acknowledgeCode() {
-        recoveryCode = ""
         codeAcknowledged = true
+        recoveryCodeWasHidden = false
+        recoveryCode = ""
+        sheet = nil
         recoveryInput = ""
     }
 
     func verifyBackup() {
+        guard recoveryInput.trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased().hasPrefix("QLU1-") else {
+            recoveryInput = ""
+            error = "Use the separate recovery code beginning QLU1-, shown after saving your backup. Your wallet passphrase cannot verify a backup."
+            return
+        }
         let parameters = ["backup_path": backupPath, "code": recoveryInput]
         recoveryInput = ""
         perform("backup_verify", params: parameters, message: "Checking the saved backup and your code…") { [weak self] result in
             guard let self else { return }
             self.apply(result)
             self.codeAcknowledged = false
-            self.notice = "Backup verified. You’re ready to receive and send private test QLU."
+            self.recoveryCodeWasHidden = false
+            self.notice = "Backup verified and remembered on this Mac. Next time, just unlock with your passphrase."
             self.destination = .wallet
         }
     }
@@ -526,29 +805,102 @@ private final class WalletModel: ObservableObject {
     }
 
     func faucet() {
-        guard !paymentUncertain else { return }
-        perform("faucet", message: "Adding test QLU and confirming it on four nodes…") { [weak self] result in
+        guard canSubmitPayment else { return }
+        let operationID = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        perform("faucet", params: ["operation_id": operationID], message: "Adding test QLU and confirming it on four nodes…") { [weak self] result in
             if let state = result["state"] as? [String: Any] { self?.apply(state) }
-            self?.notice = "Test QLU added. These coins have no monetary value."
+            self?.notice = self?.paymentUncertain == true
+                ? "Test funding needs a status check. Do not request it again yet."
+                : (self?.state.networkHealthy == true ? "Test QLU added. These coins have no monetary value."
+                   : "Test funding saved. Refresh to check its current confirmation and balance.")
+        }
+    }
+
+    func recoverPayments() {
+        preview = nil
+        perform("recover_payments", message: "Checking saved payments on all four private nodes…") { [weak self] result in
+            guard let self else { return }
+            self.apply(result)
+            self.notice = self.paymentUncertain
+                ? "A saved payment is still uncertain. Sending remains paused; no replacement payment was made."
+                : "Saved payment statuses checked. No replacement payment was made."
         }
     }
 
     func prepareSend() {
-        guard !paymentUncertain else { return }
+        guard canSubmitPayment else { return }
+        let generation = privacyGeneration
+        let wallet = walletGeneration
         perform("prepare_send", params: ["recipient": recipient, "amount": amount],
                 message: "Preparing your payment for review…") { [weak self] result in
-            self?.preview = result
+            guard let self, self.canSubmitPayment, generation == self.privacyGeneration,
+                  wallet == self.walletGeneration else { return }
+            self.preview = result
+        }
+    }
+
+    func prepareResume(_ operationID: String) {
+        guard canReviewResume(operationID) else { return }
+        preview = nil
+        let generation = privacyGeneration
+        let wallet = walletGeneration
+        perform("prepare_resume", params: ["operation_id": operationID],
+                message: "Checking the original saved payment for review…") { [weak self] result in
+            guard let self, generation == self.privacyGeneration, wallet == self.walletGeneration else { return }
+            if let state = result["state"] as? [String: Any] { self.apply(state) }
+            guard self.canReviewResume(operationID), self.state.networkHealthy,
+                  result["operation_id"] as? String == operationID, result["resume_id"] is String else { return }
+            self.preview = result.filter { $0.key != "state" }
+            guard self.resumePreviewMatchesHistory else { self.preview = nil; return }
+            self.destination = .send
+        }
+    }
+
+    func confirmResume() {
+        guard canConfirmResume else { preview = nil; return }
+        guard let id = preview?["resume_id"] as? String else { return }
+        preview = nil
+        perform("confirm_resume", params: ["resume_id": id],
+                message: "Resuming the exact original payment…") { [weak self] result in
+            guard let self else { return }
+            if let state = result["state"] as? [String: Any] { self.apply(state) }
+            self.notice = self.paymentUncertain
+                ? "The original payment still needs a status check. No replacement payment was created."
+                : "Original payment status saved. No replacement payment or additional fee was created."
+            self.destination = .wallet
+        }
+    }
+
+    func verifyIncoming() {
+        guard canUseWallet, state.networkRunning else { return }
+        let txid = incomingTransaction.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard txid.count == 64, txid.allSatisfy({ "0123456789abcdef".contains($0) }) else {
+            error = "Enter the complete 64-character transaction ID from the sender."
+            return
+        }
+        preview = nil
+        let generation = walletGeneration
+        perform("verify_received", params: ["txid": txid], message: "Verifying the incoming payment on four private nodes…") { [weak self] result in
+            guard let self, generation == self.walletGeneration else { return }
+            if let state = result["state"] as? [String: Any] { self.apply(state) }
+            self.incomingTransaction = ""
+            self.notice = "Payment checked and saved in your history. No new payment was made."
+            self.destination = .wallet
         }
     }
 
     func cancelSend() {
         preview = nil
+        let wallet = walletGeneration
+        let generation = privacyGeneration
         bridge.request("cancel_send") { [weak self] result in
-            if case .success(let state) = result { self?.apply(state) }
+            guard let self, wallet == self.walletGeneration, generation == self.privacyGeneration else { return }
+            if case .success(let state) = result { self.apply(state) }
         }
     }
 
     func confirmSend() {
+        guard canSubmitPayment else { preview = nil; return }
         guard let id = preview?["preview_id"] as? String else { return }
         preview = nil
         perform("confirm_send", params: ["preview_id": id],
@@ -556,9 +908,10 @@ private final class WalletModel: ObservableObject {
             if let state = result["state"] as? [String: Any] { self?.apply(state) }
             self?.recipient = ""
             self?.amount = ""
-            self?.pendingTXID = nil
-            self?.paymentUncertain = false
-            self?.notice = "Payment confirmed on all four private nodes."
+            self?.notice = self?.paymentUncertain == true
+                ? "Your payment needs a status check. Do not repeat it."
+                : (self?.state.networkHealthy == true ? "Payment confirmed on all four private nodes."
+                   : "Payment saved. Refresh to check its current confirmation and balance.")
             self?.destination = .wallet
         }
     }
@@ -578,6 +931,7 @@ private final class WalletModel: ObservableObject {
         quitAttempt += 1
         let attempt = quitAttempt
         polling?.invalidate()
+        resetBackupFlow()
         clearSecrets()
         sheet = nil
         privacyLocked = true
@@ -627,7 +981,7 @@ private struct PrimaryButtonStyle: ButtonStyle {
             .padding(.horizontal, 18)
             .padding(.vertical, 12)
             .foregroundStyle(prominent ? Palette.ink : Palette.ivory)
-            .background(prominent ? Palette.mint : Color.white.opacity(0.07))
+            .background(prominent ? Palette.gold : Color.white.opacity(0.07))
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .opacity(!isEnabled ? 0.38 : (configuration.isPressed ? 0.7 : 1))
     }
@@ -666,59 +1020,99 @@ private extension View {
 private struct RootView: View {
     @EnvironmentObject var model: WalletModel
     var body: some View {
-        HStack(spacing: 0) {
-            sidebar
-            VStack(spacing: 0) {
-                topbar
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 23) {
-                        if let error = model.error {
-                            message(error, symbol: "exclamationmark.circle", color: Palette.amber)
+        ZStack {
+            HStack(spacing: 0) {
+                sidebar
+                VStack(spacing: 0) {
+                    topbar
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 23) {
+                            if let error = model.error {
+                                message(error, symbol: "exclamationmark.circle", color: Palette.amber)
+                            }
+                            if let notice = model.notice {
+                                message(notice, symbol: "checkmark.circle", color: Palette.gold)
+                            }
+                            if model.busy {
+                                HStack(spacing: 12) {
+                                    ProgressView().controlSize(.small)
+                                    Text(model.busyMessage).font(.system(size: 13))
+                                }.foregroundStyle(Palette.muted)
+                            }
+                            if !model.state.walletOpen {
+                                WelcomeView()
+                            } else {
+                                switch model.destination {
+                                case .wallet: DashboardView()
+                                case .receive: ReceiveView()
+                                case .send: SendView()
+                                case .backup: BackupView()
+                                }
+                            }
+                            Text("PRIVATE DEVELOPMENT NETWORK  ·  TEST COINS HAVE NO MONETARY VALUE")
+                                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                                .tracking(1.0)
+                                .foregroundStyle(Palette.muted.opacity(0.8))
+                                .padding(.top, 6)
                         }
-                        if let notice = model.notice {
-                            message(notice, symbol: "checkmark.circle", color: Palette.mint)
-                        }
-                        if model.busy {
-                            HStack(spacing: 12) {
-                                ProgressView().controlSize(.small)
-                                Text(model.busyMessage).font(.system(size: 13))
-                            }.foregroundStyle(Palette.muted)
-                        }
-                        if !model.state.walletOpen {
-                            WelcomeView()
-                        } else {
-                            switch model.destination {
-                            case .wallet: DashboardView()
-                            case .receive: ReceiveView()
-                            case .send: SendView()
-                            case .backup: BackupView()
+                        .padding(32)
+                        .frame(maxWidth: 930, alignment: .leading)
+                        .frame(maxWidth: .infinity)
+                    }
+                    .scrollIndicators(.hidden)
+                }
+            }
+            .background(Palette.ink)
+            .foregroundStyle(Palette.ivory)
+            .tint(Palette.gold)
+            .preferredColorScheme(.dark)
+            .frame(minWidth: 900, minHeight: 680)
+            .disabled(model.cleanupWaiting || model.hasRecoveryCode)
+            .accessibilityHidden(model.hasRecoveryCode)
+            if model.hasRecoveryCode {
+                GeometryReader { geometry in
+                    ZStack {
+                        Color.black.opacity(0.65).ignoresSafeArea()
+                        ScrollView {
+                            if model.isRecoveryCodeVisible {
+                                RecoveryCodeView().environmentObject(model)
+                            } else {
+                                VStack(alignment: .leading, spacing: 20) {
+                                    Label("Your recovery code is covered", systemImage: "eye.slash")
+                                        .font(.system(size: 23, weight: .semibold))
+                                    Text("Return to QLU to view it. Switching apps keeps your wallet unlocked until its five-minute timer expires.")
+                                        .foregroundStyle(Palette.muted)
+                                    if let error = model.error {
+                                        Text(error).foregroundStyle(Palette.amber)
+                                    }
+                                    Button("Check wallet and show code") { model.becomeActive() }
+                                        .buttonStyle(PrimaryButtonStyle())
+                                }
+                                .padding(30).foregroundStyle(Palette.ivory)
                             }
                         }
-                        Text("PRIVATE DEVELOPMENT NETWORK  ·  TEST COINS HAVE NO MONETARY VALUE")
-                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                            .tracking(1.0)
-                            .foregroundStyle(Palette.muted.opacity(0.8))
-                            .padding(.top, 6)
+                        .frame(width: min(560, geometry.size.width - 48),
+                               height: min(610, geometry.size.height - 48))
+                        .background(Palette.ink)
+                        .clipShape(RoundedRectangle(cornerRadius: 18))
+                        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Palette.border))
+                        .shadow(color: .black.opacity(0.4), radius: 24)
+                        .accessibilityIdentifier("recovery-code-dialog")
                     }
-                    .padding(32)
-                    .frame(maxWidth: 930, alignment: .leading)
-                    .frame(maxWidth: .infinity)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
                 }
-                .scrollIndicators(.hidden)
+                .zIndex(1)
             }
         }
-        .background(Palette.ink)
-        .foregroundStyle(Palette.ivory)
-        .tint(Palette.mint)
-        .preferredColorScheme(.dark)
-        .frame(minWidth: 900, minHeight: 680)
-        .disabled(model.cleanupWaiting)
-        .sheet(item: $model.sheet, onDismiss: { model.dismissSheet() }) { kind in
+        .sheet(item: $model.sheet, onDismiss: { model.sheetDidDismiss() }) { kind in
             WalletSheetView(kind: kind)
                 .environmentObject(model)
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
             model.resignActive()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            model.becomeActive()
         }
         // Hiding does not consistently emit didResignActive in every activation
         // environment. Treat an explicit hide as a separate privacy boundary.
@@ -733,13 +1127,19 @@ private struct RootView: View {
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.willSleepNotification)) { _ in
             model.lock()
         }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.screensDidSleepNotification)) { _ in
+            model.lock()
+        }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.sessionDidResignActiveNotification)) { _ in
+            model.lock()
+        }
     }
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 13).fill(Palette.mint).frame(width: 42, height: 42)
+                    RoundedRectangle(cornerRadius: 13).fill(Palette.gold).frame(width: 42, height: 42)
                     Text("Q").font(.system(size: 28, weight: .bold, design: .rounded)).foregroundStyle(Palette.ink)
                 }
                 VStack(alignment: .leading, spacing: 2) {
@@ -756,7 +1156,7 @@ private struct RootView: View {
                         Image(systemName: item.symbol).frame(width: 20)
                         Text(item.rawValue)
                         Spacer()
-                        if model.destination == item { Circle().fill(Palette.mint).frame(width: 5, height: 5) }
+                        if model.destination == item { Circle().fill(Palette.gold).frame(width: 5, height: 5) }
                     }
                     .font(.system(size: 14, weight: model.destination == item ? .semibold : .regular))
                     .foregroundStyle(model.destination == item ? Palette.ivory : Palette.muted)
@@ -772,7 +1172,7 @@ private struct RootView: View {
             Spacer()
             VStack(alignment: .leading, spacing: 11) {
                 HStack(spacing: 7) {
-                    Circle().fill(model.state.networkRunning ? Palette.mint : Palette.muted).frame(width: 6, height: 6)
+                    Circle().fill(model.state.networkHealthy ? Palette.gold : Palette.muted).frame(width: 6, height: 6)
                     Text("Private network").font(.system(size: 12, weight: .medium))
                 }
                 Text("A small beginning.\nBuilt with care.")
@@ -793,7 +1193,7 @@ private struct RootView: View {
             if model.state.walletOpen {
                 Label(model.isLocked ? "Locked" : "Unlocked", systemImage: model.isLocked ? "lock.fill" : "lock.open")
                     .font(.system(size: 12))
-                    .foregroundStyle(model.isLocked ? Palette.muted : Palette.mint)
+                    .foregroundStyle(model.isLocked ? Palette.muted : Palette.gold)
                 Button(model.isLocked ? "Unlock" : "Lock") {
                     if model.isLocked { model.present(.unlock) } else { model.lock() }
                 }
@@ -802,8 +1202,8 @@ private struct RootView: View {
                 .disabled(model.busy)
             }
             Text("PRIVATE V1").font(.system(size: 9, weight: .bold)).tracking(1)
-                .foregroundStyle(Palette.mint).padding(.horizontal, 10).padding(.vertical, 7)
-                .overlay(Capsule().stroke(Palette.mint.opacity(0.3), lineWidth: 1))
+                .foregroundStyle(Palette.gold).padding(.horizontal, 10).padding(.vertical, 7)
+                .overlay(Capsule().stroke(Palette.gold.opacity(0.3), lineWidth: 1))
         }.padding(.horizontal, 32).padding(.vertical, 20)
             .overlay(alignment: .bottom) { Rectangle().fill(Palette.border).frame(height: 1) }
     }
@@ -825,7 +1225,7 @@ private struct ScreenHeading: View {
     let subtitle: String
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(eyebrow.uppercased()).font(.system(size: 10, weight: .bold)).tracking(2).foregroundStyle(Palette.mint)
+            Text(eyebrow.uppercased()).font(.system(size: 10, weight: .bold)).tracking(2).foregroundStyle(Palette.gold)
             Text(title).font(.system(size: 32, weight: .semibold, design: .rounded))
             Text(subtitle).font(.system(size: 14)).lineSpacing(4).foregroundStyle(Palette.muted)
         }
@@ -840,7 +1240,7 @@ private struct WelcomeView: View {
                           subtitle: "Create a wallet, keep a backup, and try your first payment.\nEverything here stays on your private test network.")
             HStack(alignment: .top, spacing: 16) {
                 Card {
-                    Image(systemName: "sparkle").font(.system(size: 26)).foregroundStyle(Palette.mint)
+                    Image(systemName: "sparkle").font(.system(size: 26)).foregroundStyle(Palette.gold)
                     Text("Start fresh").font(.system(size: 21, weight: .semibold))
                     Text("Create an encrypted wallet with a passphrase you choose.")
                         .foregroundStyle(Palette.muted).font(.system(size: 13)).frame(minHeight: 42, alignment: .top)
@@ -848,7 +1248,7 @@ private struct WelcomeView: View {
                         .buttonStyle(PrimaryButtonStyle()).accessibilityIdentifier("create-wallet")
                 }
                 Card {
-                    Image(systemName: "arrow.counterclockwise").font(.system(size: 26)).foregroundStyle(Palette.mint)
+                    Image(systemName: "arrow.counterclockwise").font(.system(size: 26)).foregroundStyle(Palette.gold)
                     Text("Welcome back").font(.system(size: 21, weight: .semibold))
                     Text("Bring your encrypted backup and separate recovery code.")
                         .foregroundStyle(Palette.muted).font(.system(size: 13)).frame(minHeight: 42, alignment: .top)
@@ -877,7 +1277,7 @@ private struct WalletGate<Content: View>: View {
         if model.isLocked {
             Card {
                 Label("Your wallet is locked", systemImage: "lock.fill").font(.system(size: 20, weight: .semibold))
-                Text("Unlock to continue. Your wallet also locks after five minutes without a key operation and when you leave the app.")
+                Text("Unlock to continue. Switching apps keeps your wallet unlocked. It locks after five minutes without a key operation, or when you hide it, minimize it, or put your Mac to sleep.")
                     .font(.system(size: 14)).foregroundStyle(Palette.muted).lineSpacing(4)
                 Button("Unlock wallet") { model.present(.unlock) }.buttonStyle(PrimaryButtonStyle())
                     .accessibilityIdentifier("unlock-wallet")
@@ -926,28 +1326,15 @@ private struct DashboardView: View {
                         Text("TEST COINS").font(.system(size: 9, weight: .bold)).tracking(1).foregroundStyle(Palette.muted)
                     }
                 }
-                if let payment = model.state.recentPayment {
-                    Card {
-                        HStack {
-                            Label("Latest payment", systemImage: payment["status"] as? String == "pending" ? "clock" : "checkmark.circle")
-                                .foregroundStyle(payment["status"] as? String == "pending" ? Palette.amber : Palette.mint)
-                            Spacer()
-                            Text("\(payment["amount"] as? String ?? "—") QLU").fontWeight(.semibold)
-                        }.font(.system(size: 14))
-                        Text(payment["txid"] as? String ?? "").font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(Palette.muted).textSelection(.enabled)
-                        Text(payment["status"] as? String == "pending"
-                             ? "Confirmation not yet verified. Do not repeat this payment."
-                             : "Confirmed on \(payment["confirmed_nodes"] as? Int ?? 0) private nodes")
-                            .font(.system(size: 12)).foregroundStyle(Palette.muted)
-                    }
-                }
+                PaymentHistoryView()
             }
             Card {
                 HStack {
                     VStack(alignment: .leading, spacing: 7) {
                         Text("Your private network").font(.system(size: 16, weight: .semibold))
-                        Text(model.state.networkRunning ? "Four local nodes are running." : "Start the local network to check balances and make payments.")
+                        Text(model.state.networkRunning
+                             ? (model.state.networkHealthy ? "All four private nodes agreed at the last check." : "The network needs checking. Refresh before making a payment.")
+                             : "Start the local network to check balances and make payments.")
                             .font(.system(size: 12)).foregroundStyle(Palette.muted)
                     }
                     Spacer()
@@ -957,7 +1344,7 @@ private struct DashboardView: View {
                 if model.canUseWallet && model.state.networkRunning {
                     Button("Add 1 test QLU") { model.faucet() }
                         .buttonStyle(PrimaryButtonStyle(prominent: false)).accessibilityIdentifier("test-faucet")
-                        .disabled(model.paymentUncertain)
+                        .disabled(!model.canSubmitPayment)
                 }
             }
             HStack {
@@ -969,6 +1356,121 @@ private struct DashboardView: View {
             }.buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(Palette.muted)
         }.disabled(model.busy)
     }
+}
+
+enum PaymentPresentation {
+    static func isSelfTransfer(_ payment: [String: Any]) -> Bool {
+        payment["is_self_transfer"] as? Bool == true
+    }
+
+    static func title(_ payment: [String: Any]) -> String {
+        switch payment["direction"] as? String {
+        case "received": return "Received"
+        case "funding": return "Test funding"
+        case "self": return "Transfer to yourself"
+        case "sent": return "Sent"
+        default: return payment["kind"] as? String == "funding" ? "Test funding" : "Payment"
+        }
+    }
+
+    static func statusLabel(_ payment: [String: Any], networkRunning: Bool, networkHealthy: Bool) -> String {
+        switch payment["status"] as? String {
+        case "confirmed":
+            if !networkRunning { return "Confirmed at last check · network stopped" }
+            return networkHealthy ? "Confirmed at last check on all four private nodes"
+                : "Saved confirmation · network needs checking"
+        case "conflicted":
+            if !networkRunning { return "Conflict saved at last check · network stopped" }
+            return networkHealthy ? "Conflicted at last check · another payment spent these coins"
+                : "Saved conflict · network needs checking"
+        case "not_sent": return "Not sent · interrupted before broadcast"
+        default: return payment["kind"] as? String == "receive"
+            ? "Needs checking · incoming confirmation unavailable"
+            : "Needs checking · do not repeat this payment"
+        }
+    }
+}
+
+private struct PaymentHistoryView: View {
+    @EnvironmentObject var model: WalletModel
+    var body: some View {
+        Card {
+            HStack {
+                Text("Payment history").font(.system(size: 18, weight: .semibold))
+                Spacer()
+                Button("Check payment status") { model.recoverPayments() }
+                    .buttonStyle(PrimaryButtonStyle(prominent: false))
+                    .disabled(!model.state.networkRunning || !model.state.historyLoaded)
+                    .accessibilityIdentifier("recover-payments")
+            }
+            Text("Saved on this Mac. To add an incoming payment, use Receive and check its transaction ID.")
+                .font(.system(size: 12)).foregroundStyle(Palette.muted)
+            if model.paymentUncertain {
+                Text("A payment needs checking. New payments are paused to avoid paying twice.")
+                    .font(.system(size: 13)).foregroundStyle(Palette.amber)
+                if let txid = model.pendingTXID {
+                    Text(txid).font(.system(size: 10, design: .monospaced)).textSelection(.enabled)
+                }
+            }
+            if model.state.paymentHistory.isEmpty {
+                Text("Your next payment will appear here and stay after restarting QLU.")
+                    .font(.system(size: 13)).foregroundStyle(Palette.muted)
+            }
+            ForEach(Array(model.state.paymentHistory.enumerated()), id: \.offset) { _, payment in
+                Divider().overlay(Palette.border)
+                HStack {
+                    Text(PaymentPresentation.title(payment))
+                    Spacer()
+                    Text("\(payment["amount"] as? String ?? "—") QLU").fontWeight(.semibold)
+                }.font(.system(size: 14))
+                Text(PaymentPresentation.statusLabel(payment, networkRunning: model.state.networkRunning,
+                                                     networkHealthy: model.state.networkHealthy)).font(.system(size: 12))
+                    .foregroundStyle(["pending", "conflicted"].contains(payment["status"] as? String ?? "") ? Palette.amber : Palette.muted)
+                if let created = payment["created_at"] as? Double {
+                    Text(Date(timeIntervalSince1970: created).formatted(date: .abbreviated, time: .shortened))
+                        .font(.system(size: 11)).foregroundStyle(Palette.muted)
+                }
+                if let recipient = payment["recipient"] as? String {
+                    Text("To: \(recipient)").font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(Palette.muted).textSelection(.enabled)
+                }
+                if let txid = payment["txid"] as? String {
+                    Text(txid).font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(Palette.muted).textSelection(.enabled)
+                }
+                if payment["resume_available"] as? Bool == true,
+                   let operation = payment["operation_id"] as? String {
+                    Button("Review original payment") { model.prepareResume(operation) }
+                        .buttonStyle(PrimaryButtonStyle(prominent: false))
+                        .disabled(!model.canReviewResume(operation))
+                        .accessibilityIdentifier("review-original-payment")
+                }
+                if payment["status"] as? String == "conflicted",
+                   let conflict = payment["conflict"] as? [String: Any], let txid = conflict["txid"] as? String {
+                    Text("Other payment: \(txid)").font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(Palette.muted).textSelection(.enabled)
+                    Text("This original payment will not be submitted again automatically. Check your current balance before making a separate payment.")
+                        .font(.system(size: 11)).foregroundStyle(Palette.muted)
+                }
+                if payment["kind"] as? String == "receive" {
+                    Text("No receiving fee charged to this wallet.")
+                        .font(.system(size: 11)).foregroundStyle(Palette.muted)
+                } else {
+                    Text("Fee: \(payment["fee"] as? String ?? "—") QLU")
+                        .font(.system(size: 11)).foregroundStyle(Palette.muted)
+                    if payment["direction"] as? String == "self" && payment["status"] as? String != "conflicted" {
+                        Text("The amount stays in this wallet. Only the fee leaves your balance when confirmed.")
+                            .font(.system(size: 11)).foregroundStyle(Palette.gold)
+                    }
+                }
+            }
+            if model.state.historyCount > model.state.paymentHistory.count {
+                Text("Showing the latest \(model.state.paymentHistory.count) of \(model.state.historyCount) saved records.")
+                    .font(.system(size: 12)).foregroundStyle(Palette.muted)
+            }
+        }
+    }
+
 }
 
 private struct ReceiveView: View {
@@ -997,6 +1499,22 @@ private struct ReceiveView: View {
                     Text("Only send private qludev QLU to this address. This prototype uses one receiving address per wallet.")
                         .font(.system(size: 12)).foregroundStyle(Palette.muted).lineSpacing(4)
                 }
+                Card {
+                    Text("Check an incoming payment").font(.system(size: 18, weight: .semibold))
+                    Text("Ask the sender for the transaction ID. QLU checks that the confirmed payment reached this wallet, then saves it in history.")
+                        .font(.system(size: 13)).foregroundStyle(Palette.muted).lineSpacing(4)
+                    TextField("Transaction ID · 64 characters", text: $model.incomingTransaction).walletField()
+                        .accessibilityIdentifier("incoming-txid")
+                    Button("Check received payment") { model.verifyIncoming() }
+                        .buttonStyle(PrimaryButtonStyle()).accessibilityIdentifier("verify-received")
+                        .disabled(model.incomingTransaction.isEmpty || !model.state.networkRunning)
+                    if !model.state.networkRunning {
+                        Text("Start your private network from Wallet to check a payment.")
+                            .font(.system(size: 12)).foregroundStyle(Palette.amber)
+                    }
+                    Text("This only checks the payment. It never sends funds or repeats the sender’s payment.")
+                        .font(.system(size: 11)).foregroundStyle(Palette.muted)
+                }
             }
         }.disabled(model.busy)
     }
@@ -1018,7 +1536,40 @@ private struct SendView: View {
             ScreenHeading(eyebrow: "A little QLU, on its way", title: "Send with confidence.",
                           subtitle: "You’ll review the recipient, amount, and fee before anything is signed.")
             WalletGate {
-                if model.paymentUncertain {
+                if let preview = model.preview, preview["resume_id"] is String {
+                    Card {
+                        Label(preview["kind"] as? String == "funding" ? "Resume original test funding" : "Resume your original payment", systemImage: "arrow.clockwise")
+                            .font(.system(size: 20, weight: .semibold))
+                        Text("ORIGINAL TRANSACTION ID").font(.system(size: 10, weight: .bold))
+                            .tracking(1).foregroundStyle(Palette.muted)
+                        Text(preview["txid"] as? String ?? "")
+                            .font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
+                        Text("TO").font(.system(size: 10, weight: .bold)).tracking(1).foregroundStyle(Palette.muted)
+                        Text(preview["recipient"] as? String ?? "")
+                            .font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
+                        Divider().overlay(Palette.border)
+                        if preview["kind"] as? String == "funding" {
+                            reviewLine("QLU added to this wallet", preview["wallet_credit"] ?? preview["amount"])
+                            reviewLine("Original fee paid by the test faucet", preview["fee"])
+                            reviewLine("Leaves this wallet", preview["wallet_debit"], bold: true)
+                        } else {
+                            reviewLine(PaymentPresentation.isSelfTransfer(preview) ? "Amount moved within this wallet" : "Original amount", preview["amount"])
+                            reviewLine("Original network fee", preview["fee"])
+                            reviewLine("Balance decreases by", preview["wallet_debit"], bold: true)
+                        }
+                        Text("This sends the exact transaction you already approved. It does not create a second payment or add another fee. Confirmation is checked again before resuming.")
+                            .font(.system(size: 13)).foregroundStyle(Palette.gold)
+                        Text("This review expires after two minutes.")
+                            .font(.system(size: 12)).foregroundStyle(Palette.muted)
+                        HStack(spacing: 12) {
+                            Button("Resume original payment") { model.confirmResume() }
+                                .buttonStyle(PrimaryButtonStyle()).accessibilityIdentifier("confirm-resume")
+                                .disabled(!model.canConfirmResume)
+                            Button("Cancel") { model.cancelSend() }
+                                .buttonStyle(PrimaryButtonStyle(prominent: false))
+                        }
+                    }
+                } else if model.paymentUncertain {
                     Card {
                         Text("Check your previous payment first").font(.system(size: 19, weight: .semibold))
                         Text("Confirmation is uncertain. Keep its transaction ID if available; do not repeat this payment.")
@@ -1028,22 +1579,42 @@ private struct SendView: View {
                         }
                         Text("The private network needs a confirmation check before another payment.")
                             .font(.system(size: 12)).foregroundStyle(Palette.muted)
+                        if let payment = model.state.pendingPayment,
+                           payment["resume_available"] as? Bool == true,
+                           let operation = payment["operation_id"] as? String {
+                            Button("Review original payment") { model.prepareResume(operation) }
+                                .buttonStyle(PrimaryButtonStyle())
+                                .disabled(!model.canReviewResume(operation))
+                                .accessibilityIdentifier("review-pending-original")
+                        }
+                        Button("Check payment status") { model.recoverPayments() }
+                            .buttonStyle(PrimaryButtonStyle())
+                            .disabled(!model.state.networkRunning || !model.state.historyLoaded)
                     }
                 } else if let preview = model.preview {
                     Card {
-                        Label("Review your payment", systemImage: "checkmark.shield").font(.system(size: 20, weight: .semibold))
+                        Label(PaymentPresentation.isSelfTransfer(preview) ? "Transfer to yourself" : "Review your payment",
+                              systemImage: "checkmark.shield").font(.system(size: 20, weight: .semibold))
                         Text("TO").font(.system(size: 10, weight: .bold)).tracking(1).foregroundStyle(Palette.muted)
                         Text(preview["recipient"] as? String ?? "")
                             .font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
                         Divider().overlay(Palette.border)
-                        reviewLine("Amount", preview["amount"])
+                        reviewLine(PaymentPresentation.isSelfTransfer(preview) ? "Amount moved within this wallet" : "Recipient receives", preview["amount"])
                         reviewLine("Network fee", preview["fee"])
-                        reviewLine("Total", preview["total"], bold: true)
+                        if PaymentPresentation.isSelfTransfer(preview) {
+                            reviewLine("Required available balance", preview["total"])
+                            reviewLine("Balance decreases by", preview["wallet_debit"], bold: true)
+                            Text("You are sending to this wallet’s own address. The amount stays yours; only the network fee leaves your balance.")
+                                .font(.system(size: 13)).foregroundStyle(Palette.gold)
+                        } else {
+                            reviewLine("Total leaving this wallet", preview["wallet_debit"] ?? preview["total"], bold: true)
+                        }
                         Text("This review expires after two minutes. Confirming signs and submits this exact payment.")
                             .font(.system(size: 12)).foregroundStyle(Palette.muted)
                         HStack(spacing: 12) {
                             Button("Confirm and send") { model.confirmSend() }
                                 .buttonStyle(PrimaryButtonStyle()).accessibilityIdentifier("confirm-send")
+                                .disabled(!model.canSubmitPayment)
                             Button("Cancel") { model.cancelSend() }.buttonStyle(PrimaryButtonStyle(prominent: false))
                         }
                     }
@@ -1067,11 +1638,14 @@ private struct SendView: View {
                             Spacer()
                             Button("Review payment") { model.prepareSend() }
                                 .buttonStyle(PrimaryButtonStyle()).accessibilityIdentifier("review-send")
-                                .disabled(model.recipient.isEmpty || model.amount.isEmpty || !model.state.networkRunning)
+                                .disabled(model.recipient.isEmpty || model.amount.isEmpty || !model.canSubmitPayment)
                         }
                         if !model.state.networkRunning {
                             Text("Start your private network from Wallet to send a payment.")
                                 .font(.system(size: 12)).foregroundStyle(Palette.amber)
+                        } else if !model.state.networkHealthy {
+                            Button("Check network before reviewing") { model.refresh() }
+                                .buttonStyle(PrimaryButtonStyle(prominent: false))
                         }
                     }
                 }
@@ -1096,22 +1670,20 @@ private struct BackupView: View {
                           subtitle: "You need two things to recover: your encrypted backup file\nand its separate recovery code.")
             if model.isLocked {
                 WalletGate { EmptyView() }
-            } else if !model.recoveryCode.isEmpty {
+            } else if let path = model.pendingBackupPath {
                 Card {
-                    Label("Write down your recovery code", systemImage: "key.horizontal")
+                    Label("Finish saving your backup", systemImage: "doc.badge.plus")
                         .font(.system(size: 19, weight: .semibold))
-                    Text("Keep it offline and separate from your backup file. Do not send it in chat. Leaving this app hides the code and locks your wallet.")
+                    Text("Your file has not been saved yet. Continue below, then write down the new recovery code before leaving QLU.")
                         .font(.system(size: 13)).foregroundStyle(Palette.muted).lineSpacing(4)
-                    Text(model.recoveryCode)
-                        .font(.system(size: 17, weight: .medium, design: .monospaced)).lineSpacing(10)
-                        .textSelection(.disabled).privacySensitive()
-                        .padding(20).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Palette.ink).clipShape(RoundedRectangle(cornerRadius: 10))
-                        .accessibilityLabel("Private recovery code")
-                    Text("Saved backup: \(URL(fileURLWithPath: model.backupPath).lastPathComponent)")
+                    Text("Chosen filename: \(URL(fileURLWithPath: path).lastPathComponent)")
                         .font(.system(size: 12)).foregroundStyle(Palette.muted)
-                    Button("I saved my code") { model.acknowledgeCode() }
-                        .buttonStyle(PrimaryButtonStyle()).accessibilityIdentifier("acknowledge-code")
+                    HStack {
+                        Button("Create backup and show code") { model.continueBackup() }
+                            .buttonStyle(PrimaryButtonStyle()).accessibilityIdentifier("continue-backup")
+                        Button("Cancel") { model.cancelPendingBackup() }
+                            .buttonStyle(PrimaryButtonStyle(prominent: false))
+                    }
                 }
             } else {
                 if model.state.backupVerified {
@@ -1135,14 +1707,16 @@ private struct BackupView: View {
                     Text("Choose your saved backup, then enter the code you wrote down. We’ll verify it restores this wallet.")
                         .font(.system(size: 13)).foregroundStyle(Palette.muted).lineSpacing(4)
                     HStack {
-                        Image(systemName: "doc.zipper").foregroundStyle(Palette.mint)
+                        Image(systemName: "doc.zipper").foregroundStyle(Palette.gold)
                         Text(model.backupPath.isEmpty ? "No backup selected" : URL(fileURLWithPath: model.backupPath).lastPathComponent)
                             .font(.system(size: 12)).lineLimit(1).truncationMode(.middle)
                         Spacer()
                         Button("Choose file") { model.chooseBackup(toRestore: false) }
                             .buttonStyle(PrimaryButtonStyle(prominent: false)).accessibilityIdentifier("choose-verify-backup")
                     }
-                    SecureField("Separate recovery code", text: $model.recoveryInput).walletField()
+                    Text("Use the code beginning QLU1-, not the passphrase you use to unlock your wallet.")
+                        .font(.system(size: 12)).foregroundStyle(Palette.muted)
+                    SecureField("Recovery code · QLU1-…", text: $model.recoveryInput).walletField()
                         .accessibilityIdentifier("verify-recovery-code")
                     Button("Verify backup") { model.verifyBackup() }
                         .buttonStyle(PrimaryButtonStyle()).accessibilityIdentifier("verify-backup")
@@ -1153,8 +1727,36 @@ private struct BackupView: View {
     }
 
     private var messageVerified: some View {
-        Label("Your backup was verified for this session.", systemImage: "checkmark.shield.fill")
-            .font(.system(size: 13)).foregroundStyle(Palette.mint)
+        Label("Your earlier backup check is remembered on this Mac. Keep the backup and recovery code safe for recovery.", systemImage: "checkmark.shield.fill")
+            .font(.system(size: 13)).foregroundStyle(Palette.gold)
+    }
+}
+
+private struct RecoveryCodeView: View {
+    @EnvironmentObject var model: WalletModel
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Write down your recovery code.")
+                .font(.system(size: 25, weight: .semibold, design: .rounded))
+            Text("This is your separate recovery code. It is different from the passphrase you use to unlock QLU.")
+                .font(.system(size: 14)).foregroundStyle(Palette.muted).lineSpacing(4)
+            Text(model.recoveryCode)
+                .font(.system(size: 17, weight: .medium, design: .monospaced)).lineSpacing(10)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.disabled).privacySensitive()
+                .padding(20).frame(maxWidth: .infinity, alignment: .leading)
+                .background(Palette.panel).clipShape(RoundedRectangle(cornerRadius: 10))
+                .accessibilityLabel("Private recovery code")
+            Text("Write down the entire code, including QLU1- and every hyphen. Keep it on paper, separate from your backup file. Switching apps temporarily covers the code. Locking the wallet clears it.")
+                .font(.system(size: 13)).foregroundStyle(Palette.muted).lineSpacing(4)
+            Text("Saved backup: \(URL(fileURLWithPath: model.backupPath).lastPathComponent)")
+                .font(.system(size: 12)).foregroundStyle(Palette.muted)
+            Button("I saved my code") { model.acknowledgeCode() }
+                .buttonStyle(PrimaryButtonStyle()).accessibilityIdentifier("acknowledge-code")
+        }
+        .padding(30).frame(maxWidth: .infinity, alignment: .leading)
+        .foregroundStyle(Palette.ivory).tint(Palette.gold)
+        .preferredColorScheme(.dark)
     }
 }
 
@@ -1212,7 +1814,7 @@ private struct WalletSheetView: View {
                     .buttonStyle(PrimaryButtonStyle()).disabled(model.passphrase.isEmpty)
                     .keyboardShortcut(.defaultAction).accessibilityIdentifier("submit-unlock")
             case .open:
-                Text("Existing wallets open locked. You’ll verify their backup again in this session.")
+                Text("Existing wallets open locked. After you enter your passphrase, QLU checks any saved backup verification.")
                     .font(.system(size: 13)).foregroundStyle(Palette.muted)
                 if !model.wallets.isEmpty {
                     ScrollView {
@@ -1246,7 +1848,7 @@ private struct WalletSheetView: View {
         }
         .padding(30).frame(width: 500)
         .background(Palette.ink).foregroundStyle(Palette.ivory)
-        .preferredColorScheme(.dark).tint(Palette.mint)
+        .preferredColorScheme(.dark).tint(Palette.gold)
         .disabled(model.busy)
         .interactiveDismissDisabled(model.busy)
     }
@@ -1292,6 +1894,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+#if !QLU_WALLET_TESTS
 @main
 struct QLUWalletApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
@@ -1319,3 +1922,4 @@ struct QLUWalletApp: App {
         }
     }
 }
+#endif

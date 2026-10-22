@@ -39,6 +39,7 @@ def run():
     def request(command, params=None, error=None):
         nonlocal counter
         counter += 1
+        if command == "faucet" and params is None: params = {"operation_id": uuid.uuid4().hex}
         response = app.handle({"id": counter, "command": command, "params": params or {}})
         if error:
             if response.get("ok") is not False or response.get("error", {}).get("code") != error:
@@ -85,9 +86,9 @@ def run():
         assert state["locked"] is True and state["backup_verified"] is False
         request("unlock", {"passphrase": "Deliberately incorrect fixture password"}, error="wallet_failed")
         state = request("unlock", {"passphrase": password})
-        assert state["address"] is None
-        request("backup_verify", {"backup_path": str(backup_path), "code": code})
-        report["checks"]["reopen_locked_wrong_password_rejected_backup_rechecked"] = True
+        assert state["address"] == source_address and state["backup_verified"] is True
+        assert state["backup_verification_status"] == "remembered"
+        report["checks"]["reopen_locked_wrong_password_rejected_verification_remembered"] = True
 
         review = request("prepare_send", {"recipient": recipient, "amount": "0.25000000"})
         assert review["fee"] == "0.00100000" and review["total"] == "0.25100000"
@@ -103,7 +104,8 @@ def run():
         review = request("prepare_send", {"recipient": recipient, "amount": "0.25000000"})
         payment = request("confirm_send", {"preview_id": review["preview_id"]})["payment"]
         assert payment["confirmed_nodes"] == 4
-        request("confirm_send", {"preview_id": review["preview_id"]}, error="preview_invalid")
+        replay = request("confirm_send", {"preview_id": review["preview_id"]})["payment"]
+        assert replay["txid"] == payment["txid"]
         assert request("refresh")["balance"] == "0.74900000"
         report["checks"]["reviewed_payment_exact_fee_change_and_one_use"] = True
         report["first_payment"] = payment

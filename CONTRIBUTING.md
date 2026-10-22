@@ -1,3 +1,55 @@
+# Contributing to QLU
+
+QLU welcomes focused patches, reproducible bug reports and independent review of
+its **experimental private-network** implementation. This is an upstream-derived
+Bitcoin Core repository with preserved Git ancestry and dependency attribution.
+QLU-specific questions and patches belong in this repository; do not send them to
+Bitcoin Core maintainers.
+
+## Before changing code
+
+- Read [the private v1 rules](docs/QLU_PRIVATE_V1.md), [the current status](docs/STATUS.md)
+  and the applicable repository guidance in `AGENTS.md`.
+- Keep QLU tooling under `qlu/` and design decisions under `docs/`. Preserve the
+  upstream baseline and attribution. Do not modify or import earlier q-chain
+  projects as part of a patch.
+- Keep supported laboratory nodes on localhost and `qludev`/regtest. Opening the
+  source does not authorize a public network or real-value use.
+- Keep changes small enough to review. Explain the problem, resulting behavior,
+  relevant tests and remaining limitations. Report failures; do not weaken checks
+  to make a run pass.
+- Changes to consensus, signing, recovery, emission or mining need a written
+  design and independent review before any public network release.
+
+## Testing and privacy
+
+Follow the [build guide](docs/FOUNDATION.md) and [wallet guide](docs/WALLET_APP.md).
+Use the isolated, hash-pinned Python dependency environment. Run tests relevant
+to the patch and identify the exact revision and platform in your report. Native
+wallet testing currently requires macOS. A passing local test is not a security
+audit or a claim of support for an untested platform.
+
+Use newly generated, valueless test wallets. Keep node data, encrypted vaults,
+portable backups, recovery codes, passphrases, RPC cookies, signed payment files,
+local evidence and personal filesystem paths out of commits, screenshots and
+public issues. Store local laboratory artifacts under ignored `.local/`.
+
+For suspected vulnerabilities, follow [SECURITY.md](SECURITY.md). Do not open a
+public issue containing exploit details or wallet material.
+
+## License and upstream guidance
+
+Contributions are provided under the repository's [MIT license](COPYING), with
+applicable third-party notices retained. Do not add code or assets without
+compatible permission and attribution. The open chain must remain usable without
+VibexHQ services; optional hosted services must not require customer spending keys.
+
+The original Bitcoin Core contributor guide is preserved below for upstream
+context. Its project-specific links and communication channels concern Bitcoin
+Core, not QLU.
+
+---
+
 Contributing to Bitcoin Core
 ============================
 

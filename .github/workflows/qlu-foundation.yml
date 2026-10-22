@@ -126,6 +126,9 @@ jobs:
           PY
       - name: Test controller safety, recovery, and encrypted wallets
         run: python3 -m unittest discover -s qlu/tests -v
+      - name: Test native wallet backup, focus cover and lock flow
+        if: runner.os == 'macOS'
+        run: python3 qlu/test_wallet_native.py
       - name: Run registered upstream and QLU tests
         run: python3 qlu/build.py test --jobs 2
       - name: Exercise four upstream regression-test nodes
@@ -136,6 +139,18 @@ jobs:
         run: python3 qlu/wallet_smoke.py
       - name: Exercise wallet-app backup, payment review, and restored spending
         run: python3 qlu/wallet_app_smoke.py
+      - name: Exercise persistent payments, interruption recovery, and duplicate prevention
+        run: python3 qlu/payment_history_smoke.py
+      - name: Verify remembered backup checks across private wallet restarts
+        run: python3 qlu/backup_verification_smoke.py
+      - name: Exercise two-wallet received payments and self-transfer clarity
+        run: python3 qlu/received_payment_smoke.py
+      - name: Exercise conflicting payments, private partitions and chain recovery
+        run: python3 qlu/network_resilience_smoke.py
+      - name: Exercise wallet identity continuity and cross-process journal ownership
+        run: python3 qlu/wallet_identity_smoke.py
+      - name: Resume interrupted original payments across fresh processes
+        run: python3 qlu/payment_resume_smoke.py
       - name: Stop only the upstream laboratory's nodes
         if: always()
         run: python3 qlu/devnet.py stop

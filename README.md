@@ -1,8 +1,14 @@
 # QLU
 
-A fresh, payments-first blockchain project by VibexHQ, with an optional developer-infrastructure business.
+A payments-first blockchain experiment by VibexHQ, with an optional developer-infrastructure business.
 
 **Current stage: QLU private v1 prototype.** The separate `qludev` network implements its own identity, mandatory ML-DSA-65 + Schnorr spending, and an encrypted backup/recovery experiment. It runs four local nodes with valueless test coins. The earlier Bitcoin regtest baseline is preserved. This is unaudited development code; RandomX, production economics, contact-wallet UX, and Developer Cloud are later stages.
+
+**Public source is not a public network launch.** This repository has no production
+currency, investment offering or mainnet release. The native wallet is a macOS
+development app. Windows, Linux and mobile wallet/recovery support remain release
+gates, not completed compatibility claims. The laboratory uses temporary SHA-256
+proof of work, not RandomX. See the [publication scope](docs/OPEN_SOURCE.md).
 
 ## Start here
 
@@ -14,6 +20,9 @@ A fresh, payments-first blockchain project by VibexHQ, with an optional develope
 - [Measured private-network performance](docs/PERFORMANCE.md)
 - [Encrypted wallet and guided recovery](docs/SECURE_WALLET.md)
 - [Native Mac wallet app](docs/WALLET_APP.md)
+- [Payment conflict and chain recovery rules](docs/NETWORK_RESILIENCE.md)
+- [Wallet identity continuity](docs/WALLET_IDENTITY.md)
+- [Interrupted payment recovery](docs/INTERRUPTED_PAYMENTS.md)
 - [MacBook encrypted-wallet test steps](docs/MACBOOK_WALLET_TEST.md)
 - [MacBook encrypted-wallet result](docs/MACBOOK_WALLET_RESULT.md)
 - [MacBook recovery test](docs/MACBOOK_RECOVERY.md)
@@ -55,10 +64,17 @@ payments through the existing encrypted wallet. See the
 
 Keep one upstream-derived repository, small reviewable changes, and tests attached to exact revisions. Introduce consensus changes separately. Keep the open network usable without VibexHQ services. Build optional paid infrastructure around developer needs, without taking customer spending keys.
 
-The QLU workflow is `.github/workflows/qlu-foundation.yml`. It has not been run on hosted CI. Upstream's original broad workflow is preserved outside the workflow directory at `.github/upstream-ci.yml` for reference.
+The QLU workflow is `.github/workflows/qlu-foundation.yml`. Hosted results must be
+checked for the exact published revision; do not infer a passing build from the
+workflow's presence. Upstream's original broad workflow is preserved outside the
+workflow directory at `.github/upstream-ci.yml` for reference. See
+[contribution guidance](CONTRIBUTING.md) and the [security policy](SECURITY.md).
 
 ## Upstream and license
 
-This is a fresh fork at the official Bitcoin Core v31.1 commit, not a copy of the previous QLU fork. The initial Git fetch is shallow; the commit identity and upstream relationship are preserved.
+This repository is based on the official Bitcoin Core v31.1 commit recorded in
+[`qlu/upstream.json`](qlu/upstream.json). Preserve that actual upstream ancestor
+when publishing QLU changes. Bitcoin Core's original networks and attribution
+remain in the source; QLU-specific experimental rules apply to `qludev`.
 
 Bitcoin Core and this repository are distributed under the [MIT license](COPYING), subject to the notices of bundled dependencies. Original developer attribution remains in place. See [the upstream README](doc/bitcoin-core-README.md) and [official source](https://github.com/bitcoin/bitcoin/tree/v31.1).

@@ -76,6 +76,9 @@ def build() -> dict:
             "LSMinimumSystemVersion": "14.0",
             "NSHighResolutionCapable": True,
             "NSPrincipalClass": "NSApplication",
+            "NSDownloadsFolderUsageDescription": "QLU reads or saves the encrypted wallet backups you choose in Downloads. Your recovery code stays separate.",
+            "NSDocumentsFolderUsageDescription": "QLU reads or saves encrypted wallet files and backups you choose in Documents.",
+            "NSDesktopFolderUsageDescription": "QLU reads or saves encrypted wallet files and backups you choose on Desktop.",
             "QLUProjectRoot": str(ROOT),
             "QLUPrivateNetwork": "qludev",
         }
