@@ -52,6 +52,34 @@ blocker; it is not a specialist security audit. Deadline enforcement requires a
 live controlling process and normal OS scheduling; abrupt parent termination can
 orphan a helper. No new physical-device or public-network claim is made.
 
+Hosted [run 39897768797](https://github.com/interstellarx26/QLU/actions/runs/39897768797)
+at `c36df732c5aa8ef95d5c3c72d2385091ed5bc99d` passed the complete Linux job,
+including the new helper-fault drill. The Mac job passed compilation, 534 Python
+tests, 70 native model checks, 155 registered core tests and the preceding live
+drills, then failed the existing network-resilience drill. Its original log did
+not identify the failure location. One local reproduction and three further
+frozen-source repetitions each passed all 17 resilience checks; these passes do
+not establish the cause of the hosted failure. The drill now emits an explicitly
+allowlisted diagnostic summary on failure, without exception text, secrets,
+source lines, local variables or absolute paths. Assertions and failure exit
+status are retained. Both local Python environments passed the expanded
+536-test suite after the diagnostic change.
+
+A controlled RPC regression then established a separate test-controller race:
+an owned connection could finish between two partition snapshots, causing an
+immediate failure despite time remaining in the existing ten-second convergence
+budget. Two late-arrival regressions failed before the fix. The controller now
+keeps converging within that same budget; incomplete handshakes cannot pass,
+foreign/malformed/non-loopback peers still fail immediately, and the final
+partition assertion remains strict. Six new regressions cover success, late
+arrival, unsafe peers and nonconvergence. This proves and fixes that controller
+race, but does not prove it caused the original hosted failure.
+With this follow-up, both local Python environments passed all **542 tests**.
+The final real-node resilience drill passed all **17 checks** in attempt
+`143249a96d934cbe937a5b466f1799b3`, with unchanged source/binary fingerprints,
+all owned nodes stopped and all eight ports free. Independent review found no
+blocker in the convergence fix. A fresh hosted run must validate this revision.
+
 ## Hosted CI compatibility — 2026-10-22
 
 The first GitHub Actions run registered and built successfully on Ubuntu, then

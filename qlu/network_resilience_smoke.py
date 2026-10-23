@@ -35,6 +35,22 @@ from test_framework.blocktools import add_witness_commitment
 GROUPS = ({0, 1}, {2, 3})
 
 
+def failure_location(error):
+    """No exception messages, source lines, local variables or absolute paths."""
+    return {'error_type': type(error).__name__,
+            'error_location': [{'file': Path(frame.filename).name, 'line': frame.lineno,
+                                'function': frame.name}
+                               for frame in traceback.extract_tb(error.__traceback__)]}
+
+
+def failure_summary(report):
+    """Explicit public allowlist; never publish arbitrary future report fields."""
+    names = ('attempt', 'started_at', 'completed_at', 'passed', 'checks',
+             'error_type', 'error_location', 'last_operations', 'controller_failures',
+             'cleanup', 'ports_free', 'source_unchanged', 'binaries_unchanged')
+    return {name: report[name] for name in names if name in report}
+
+
 def identify_peers(peers, state, label, local, *, allow_incomplete=False):
     """Fail closed on non-loopback, foreign, ambiguous or malformed peer data."""
     result = {}
@@ -58,6 +74,7 @@ class PartitionController(_AppNet):
     def __init__(self, root, data_name):
         super().__init__(root, data_name, 'QLUWalletAppResilience')
         self.children = {}
+        self.start_failure = None
 
     def endpoint(self, index):
         assert type(index) is int and index in range(4)
@@ -115,7 +132,10 @@ class PartitionController(_AppNet):
             for index in range(4):
                 self.start_one(index)
             self.reconnect()
-        except BaseException:
+        except BaseException as error:
+            # WalletApp deliberately translates backend errors. Retain only
+            # their safe location here before that translation loses it.
+            self.start_failure = failure_location(error)
             self.stop()
             raise
 
@@ -182,20 +202,29 @@ class PartitionController(_AppNet):
                                 raise
                 if set(known.values()) != own_group - {index} or any(peer.get('subver') == '' for peer in peers):
                     separated = False
-            if separated:
-                self.assert_partition()
+            # A pending connection can finish between this scan and its
+            # confirming snapshot. Keep converging within the same deadline;
+            # malformed, foreign and non-loopback identities still raise.
+            if separated and self._partition_ready(allow_incomplete=True):
                 return
             time.sleep(.1)
         raise AssertionError('Exact 2+2 partition was not established')
 
-    def assert_partition(self):
+    def _partition_ready(self, *, allow_incomplete=False):
         state = self.read_state()
+        ready = True
         for index in range(4):
             own_group = next(group for group in GROUPS if index in group)
             self.verify_node(index)
             peers = self.rpc(index, 'getpeerinfo')
-            known = identify_peers(peers, state, self.process_label, index)
-            assert set(known.values()) == own_group - {index}
+            known = identify_peers(peers, state, self.process_label, index,
+                                   allow_incomplete=allow_incomplete)
+            if set(known.values()) != own_group - {index} or any(peer.get('subver') == '' for peer in peers):
+                ready = False
+        return ready
+
+    def assert_partition(self):
+        assert self._partition_ready()
         return True
 
     def group_synced(self, indexes, expected):
@@ -728,9 +757,7 @@ def run():
                                   'fresh_payment': fresh_payment['txid']}
         report['passed'] = True
     except BaseException as error:
-        report['error_type'] = type(error).__name__
-        report['error_location'] = [{'file': Path(frame.filename).name, 'line': frame.lineno, 'function': frame.name}
-                                    for frame in traceback.extract_tb(error.__traceback__)]
+        report.update(failure_location(error))
         report['last_operations'] = [{'command': wallet.last_command, 'error_code': wallet.last_error} for wallet in wallets]
         raise
     finally:
@@ -759,6 +786,11 @@ def run():
         report['passed'] = (report['passed'] and cleanup and all(report['ports_free'].values())
                             and report['source_unchanged'] and report['binaries_unchanged'])
         report['completed_at'] = datetime.now(timezone.utc).isoformat()
+        report['controller_failures'] = [network.controller.start_failure for network in networks
+                                         if network.controller.start_failure is not None]
+        if not report['passed']:
+            # Preserve the safe failure location even if writing evidence fails.
+            print(json.dumps(failure_summary(report), indent=2), flush=True)
         evidence = protocol.ROOT / '.local/evidence'
         secure_directory(evidence)
         for destination in (directory / 'result.json', evidence / 'network-resilience-latest.json'):
