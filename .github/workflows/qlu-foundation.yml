@@ -39,7 +39,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake pkgconf python3 python3-venv perl curl libboost-dev libevent-dev libsqlite3-dev
+          sudo apt-get install -y build-essential clang cmake pkgconf python3 python3-venv perl curl libboost-dev libevent-dev libsqlite3-dev
       - name: Build verified OpenSSL source on Linux
         if: runner.os == 'Linux'
         run: |
@@ -114,6 +114,9 @@ jobs:
           pathlib.Path(".local/evidence/ci-dependencies.json").write_text(json.dumps(record, indent=2) + "\n")
           print(json.dumps(record, indent=2))
           PY
+      - name: Check native cryptographic inputs with memory-error instrumentation
+        timeout-minutes: 15
+        run: python3 qlu/native_safety.py --jobs 2
       - name: Build the pinned source
         run: python3 qlu/build.py build --jobs 2
       - name: Check the selected OpenSSL library

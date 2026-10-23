@@ -50,6 +50,9 @@ weaken payment authorization, recovery requirements or honest status reporting.
    [Independent payment conformance](INDEPENDENT_CONFORMANCE.md) defines a bounded
    cross-implementation check of the existing hybrid rules, portable synthetic
    cases and reverse signature validation through private-node consensus.
+   [Native input safety](NATIVE_INPUT_SAFETY.md) adds sanitizer-instrumented
+   malformed key/signature and signing-helper input checks using the actual
+   native sources. It does not establish full-node or OpenSSL-provider coverage.
 5. **Consumer experience and developer infrastructure.** Add authenticated
    contact/payment-request flows with clear identity and recovery tradeoffs.
    Build optional Vibex Developer Cloud read APIs, usage metering and business

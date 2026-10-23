@@ -19,6 +19,7 @@ proof of work, not RandomX. See the [publication scope](docs/OPEN_SOURCE.md).
 - [Current verification and next work](docs/STATUS.md)
 - [Measured private-network performance](docs/PERFORMANCE.md)
 - [Independent payment-signature checks](docs/INDEPENDENT_CONFORMANCE.md)
+- [Native cryptographic input-safety checks](docs/NATIVE_INPUT_SAFETY.md)
 - [Encrypted wallet and guided recovery](docs/SECURE_WALLET.md)
 - [Native Mac wallet app](docs/WALLET_APP.md)
 - [Payment conflict and chain recovery rules](docs/NETWORK_RESILIENCE.md)

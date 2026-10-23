@@ -7,6 +7,65 @@ AND Schnorr spending, encrypted working-wallet storage and recovery, and restore
 spending on four loopback nodes.
 Test coins have no value. Both laboratory networks are stopped after tests.
 
+## Native cryptographic input safety — 2026-10-23
+
+The [native input-safety gate](NATIVE_INPUT_SAFETY.md) builds the actual QLU
+crypto and signing-helper sources with AddressSanitizer and
+UndefinedBehaviorSanitizer. Its fresh, small offline build also instruments
+the local hash helpers, UniValue and vendored secp256k1. It does not replace
+normal binaries or modify production consensus, signing or wallet code.
+
+The local Mac gate passed **10,761 native negative cases** and **8 valid
+controls**, plus **59 malformed helper requests** and **34 independently
+checked valid helper controls**. Length boundaries, mutations across every
+key/signature byte, malformed JSON, duplicated fields, partial nested objects,
+extra arguments and the 4,095/4,096/4,097-byte input boundary were checked.
+Valid Schnorr signatures were retained for ML-DSA mutation cases. Separate
+deliberate faults produced the required ASan heap-buffer-overflow and UBSan
+signed-integer-overflow reports; their nonzero exits are expected probe results,
+not cryptographic failures. No unexpected sanitizer finding occurred.
+
+All **14 C/C++ compilation units** had the required instrumentation flags.
+Source, binary, selected OpenSSL and pinned reference-package fingerprints
+matched before and after. The runner bounds process time and input/output,
+disables core dumps, isolates loader/provider overrides, and cleans up only
+processes it started. This gate starts no network services and uses only public
+synthetic inputs. Existing wallets are not test inputs.
+
+All **625 Python tests passed without skips** in both local isolated environments
+(Python 3.12.13 and 3.14.6), including **18 new runner tests**. Separate review
+found and closed runner issues around report validation, compiler selection,
+bounded input handling, process cleanup and dependency provenance. It is not
+an independent specialist cryptographic audit.
+
+Two initial gate attempts failed and remain recorded. Attempt
+`6045f5045b0b4f6995eb41c91eed5f41` stopped at configuration after selecting a
+mismatched Mac compiler/SDK. The runner now uses the matching `xcrun` compiler,
+C++ compiler and SDK without changing system settings. Attempt
+`addf8fcb1fe943ff964db10d0153f94d` passed both probes and the native corpus,
+then rejected matching OpenSSL versions because the command-line tool included
+an explicit library annotation. Strict normalization now accepts that matching
+form and rejects differing or malformed identities. Both corrections have
+regression tests; no production cryptographic assertion was weakened.
+
+Successful local attempt **`00b09172a7254edba9be4dcdbe647bc9`** ran from
+`2026-10-23T18:45:27.280675Z` to `2026-10-23T18:45:44.582964Z` on Apple silicon
+with Python 3.12.13, Apple Clang 21 and OpenSSL 3.6.4. This is not a performance
+measurement. The Git base was `de1d4d8e1ae5e0fcf9e3b071b0a202b8046afe2d`
+plus the fingerprinted milestone sources. The fixed helper input schedule hash is
+`6fd0e8a98c8c426304cfde9988f3eea4d2ffcd3ffd4ff8ca1cea23ab4bf24f73`.
+The native mutation schedule is fixed, while fixture signatures retain normal
+production signing randomness. Evidence remains ignored under
+`.local/evidence/native-safety-<attempt>.json`; the final log is
+`native-safety-version-fixed-local.log`, and the full suite logs are
+`native-safety-unit-python312-final.log` and `native-safety-unit-python314-final.log`.
+Exact-revision hosted Mac and Linux results are pending at this implementation
+commit; all existing private-network drills remain required in both jobs.
+
+The linked OpenSSL provider and system libraries are not sanitizer-instrumented
+by this gate. Coverage-guided fuzzing, full-node/P2P parsing, concurrency, leak
+checking, hostile-network endurance and production security remain unproven.
+
 ## Independent hybrid payment checks — 2026-10-23
 
 The [independent conformance milestone](INDEPENDENT_CONFORMANCE.md) is implemented

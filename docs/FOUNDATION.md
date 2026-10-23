@@ -45,6 +45,11 @@ Local outputs are in `build/qlu-foundation/`. Build transcripts and provenance a
 `.local/evidence/`; CTest also writes `build/qlu-foundation/qlu-ctest.xml`. Raw local artifacts
 are ignored, and a concise reviewable result should be kept in `docs/STATUS.md`.
 
+The separate [native input-safety gate](NATIVE_INPUT_SAFETY.md) compiles a small
+test-only helper and verifier with Clang sanitizers in a fresh `.local/` directory.
+It uses the same pinned Python environment and OpenSSL dependency. It does not
+replace the normal binaries or constitute a sanitized full-node build.
+
 ## Operate the laboratory
 
 ```sh
