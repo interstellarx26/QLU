@@ -50,6 +50,11 @@ test-only helper and verifier with Clang sanitizers in a fresh `.local/` directo
 It uses the same pinned Python environment and OpenSSL dependency. It does not
 replace the normal binaries or constitute a sanitized full-node build.
 
+The [private peer-message drill](P2P_INPUT_RESILIENCE.md) uses the normal binaries
+on four fresh, owned `qludev` nodes. Run it with the same isolated Python environment
+using `python qlu/p2p_resilience.py`. It must hold the laboratory port lock and
+stop its own nodes after malformed-message and valid-payment checks.
+
 ## Operate the laboratory
 
 ```sh

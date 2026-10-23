@@ -7,6 +7,57 @@ AND Schnorr spending, encrypted working-wallet storage and recovery, and restore
 spending on four loopback nodes.
 Test coins have no value. Both laboratory networks are stopped after tests.
 
+## Private P2P input resilience — 2026-10-23
+
+The [P2P resilience drill](P2P_INPUT_RESILIENCE.md) tests actual version-1 peer
+connections on four fresh, owned localhost QLU nodes. Consensus, signing,
+wallet, recovery and mining rules are unchanged. The normal wallet network and
+user wallets are not inputs.
+
+The local Mac trial passed **48 malformed wire cases**, **12 invalid hybrid
+transaction variants**, and **8 incomplete-frame client closures**. It requires
+fresh peer/case-specific rejection evidence, exact ping responses, and unchanged
+chain, mempool and UTXO state. Fragmented valid messages include receiver-progress
+evidence; closing an incomplete connection is explicitly not counted as a server
+rejection. Each node then accepted its original valid transaction through P2P,
+after invalid witnesses sharing that transaction ID had been rejected.
+
+All **4 distinct payments** confirmed on all four nodes. Their exact stored
+transaction/block bytes, recipient outputs, fees and global UTXO accounting
+survived all nodes restarting. Replaying all four confirmed transactions through
+P2P added no payment, fee or balance change. Both txid and wtxid relay negotiation
+are covered. Every fixture node stopped and all eight laboratory ports were free.
+
+All **671 Python tests passed without skips** in each local pinned environment
+(Python 3.12.13 and 3.14.6), including **46 new focused tests**. Separate agent
+review checked the design, wire client, failure boundaries and evidence. Review
+closed gaps around receive-prefix proof, parser-log attribution, nonblocking log
+opens and nested public-report filtering. This is not a specialist security audit.
+
+Initial live attempt `f1a67114374c485998965f40cc4f318c` stopped during its funding
+snapshot: the shared CLI adapter represents an absent output as an empty string,
+while the new drill had expected only JSON null. A drill-local adapter now accepts
+exactly those two absent forms, rejects other malformed values, and still requires
+an actual unspent output for a confirmed payment. Three regression tests cover
+the real CLI return convention and both snapshot/confirmation paths. The failed
+attempt and clean cleanup evidence are retained; shared controller behavior was
+not changed.
+
+Successful local attempt **`0fc47bbc2e1e4ee681748bd5df24434e`** ran from
+`2026-10-23T20:18:52.908270+00:00` to `2026-10-23T20:19:14.822561+00:00`.
+The base was `a3f4bbe27cb8fbf6467ebab1e62a7b8a21c6f125` plus the fingerprinted
+milestone sources. Source and normal binary fingerprints matched before/after;
+the existing node binary was reused locally because production sources did not
+change. Evidence is ignored under `.local/evidence/p2p-resilience-<attempt>.json`,
+with `p2p-resilience-local-adapter-fixed.log` and
+`p2p-resilience-unit-python{312,314}-final.log`. Hosted Mac/Linux clean builds and
+the expanded 14-drill workflow are pending for the implementation revision.
+
+This fixed corpus is bounded to 600 seconds of work, small payloads and limited
+per-node traffic. It does not establish v2 transport safety, sustained hostile
+network capacity, full-node sanitizer coverage, general denial-of-service
+resistance or public-release readiness.
+
 ## Native cryptographic input safety — 2026-10-23
 
 The [native input-safety gate](NATIVE_INPUT_SAFETY.md) builds the actual QLU

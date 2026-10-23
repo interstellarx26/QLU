@@ -34,6 +34,9 @@ weaken payment authorization, recovery requirements or honest status reporting.
    Absence alone cannot clear a payment or authorize a replacement.
    [Bounded password derivation](WALLET_KDF_TIMEOUT.md) isolates native encryption
    work so a stalled helper cannot indefinitely trap wallet unlock or recovery.
+   [Private peer-message resilience](P2P_INPUT_RESILIENCE.md) tests bounded malformed
+   v1 messages, hybrid rejection and subsequent valid P2P payments on fresh owned
+   nodes. It does not establish sustained hostile-network or v2 transport safety.
 3. **Measured protocol and mining design.** Benchmark hybrid verification, block
    propagation, storage and denial-of-service limits on documented hardware.
    The [bounded payment workload](PAYMENT_WORKLOAD.md) checks 32 real transfers,

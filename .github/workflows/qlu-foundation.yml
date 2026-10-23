@@ -181,6 +181,9 @@ jobs:
       - name: Verify independent hybrid signatures on four private nodes
         timeout-minutes: 15
         run: python3 qlu/conformance_smoke.py
+      - name: Reject malformed private peer messages and preserve valid payments
+        timeout-minutes: 15
+        run: python3 qlu/p2p_resilience.py
       - name: Stop only the upstream laboratory's nodes
         if: always()
         run: python3 qlu/devnet.py stop
