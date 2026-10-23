@@ -63,8 +63,20 @@ full suite logs are `payment-workload-unit-python312-final.log` and
 before/after hashes match. The unchanged node executable SHA-256 is
 `b13126309cbb1bb8d088a05aeb38fb4e2861d7e492f22e0cea1b84c749260bcc`.
 All owned nodes stopped, all eight ports were free, and all four protected user
-vault/backup/history files retained their prior hashes. CI now includes the
-bounded workload on Mac and Linux; its hosted result needs exact-revision checking.
+vault/backup/history files retained their prior hashes.
+
+The published implementation, `94a5e7772ad8d92f1e6279844a0d1bc67fd7102f`, passed
+hosted [run 39906540092](https://github.com/interstellarx26/QLU/actions/runs/39906540092)
+on October 23. Both Ubuntu 24.04 and macOS 15 passed **562 Python tests** with
+no Python skips, **154 core tests**, every private-network drill, the new
+32-payment workload and cleanup. Of 155 registered core targets, the optional
+`script_assets_tests` target was skipped because its external corpus was not
+configured; that target is not counted as an executed pass. macOS also passed
+**70 native wallet model checks**. The Linux workload attempt was
+`c5185c4181b745378cb8d6631e5c1c58`; the Mac attempt was
+`d7dbdf5b446840e8af5c0d1be18c2f37`. Both reported `passed: true` and
+`phase: complete`. Later documentation-only result recording does not change
+the implementation tested in that run.
 
 ## Password-helper timeout and recovery — 2026-10-22
 
@@ -114,7 +126,8 @@ orphan a helper. No new physical-device or public-network claim is made.
 Hosted [run 39897768797](https://github.com/interstellarx26/QLU/actions/runs/39897768797)
 at `c36df732c5aa8ef95d5c3c72d2385091ed5bc99d` passed the complete Linux job,
 including the new helper-fault drill. The Mac job passed compilation, 534 Python
-tests, 70 native model checks, 155 registered core tests and the preceding live
+tests, 70 native model checks, 154 core tests (one optional external-corpus test
+skipped) and the preceding live
 drills, then failed the existing network-resilience drill. Its original log did
 not identify the failure location. One local reproduction and three further
 frozen-source repetitions each passed all 17 resilience checks; these passes do
@@ -142,8 +155,10 @@ blocker in the convergence fix. A fresh hosted run must validate this revision.
 That final revision, `4ec966aec4f7c17428ab2be32ae2eeabaad9ba48`, passed hosted
 [run 39901214881](https://github.com/interstellarx26/QLU/actions/runs/39901214881),
 checked October 23. Both Ubuntu 24.04 and macOS 15 passed **542 Python tests**,
-**155 registered core tests**, all private-network drills and cleanup. macOS
-also passed **70 native model checks**. This closes hosted validation of that
+**154 core tests**, all private-network drills and cleanup. Of 155 registered
+core targets, **one optional `script_assets_tests` target was skipped** because
+its external corpus was not configured; it is not counted as an executed pass.
+macOS also passed **70 native model checks**. This closes hosted validation of that
 revision, while leaving the original earlier failure's cause unproven.
 
 ## Hosted CI compatibility — 2026-10-22
@@ -171,7 +186,8 @@ The cross-import concurrency regression failed against the previous code; all
 Hosted validation of that mitigation passed at commit
 `a223137736b80ee8b7185e305f6a6b75a0586870` in
 [run 39887926455](https://github.com/interstellarx26/QLU/actions/runs/39887926455):
-515 Python tests and 155 registered core tests on each OS, 70 native Mac model
+515 Python tests and 154 passed core tests plus one optional external-corpus
+skip on each OS (155 registered targets), 70 native Mac model
 checks, every private-network drill and both cleanup steps. Later changes need
 their own validation; this result applies to that exact revision.
 Current hosted evidence is available in [GitHub Actions](https://github.com/interstellarx26/QLU/actions/workflows/qlu-foundation.yml);
