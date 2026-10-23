@@ -1,7 +1,8 @@
 # Private P2P input resilience
 
-Status: implementation and verification in progress. Results belong in
-[STATUS.md](STATUS.md), including failures and the exact tested revision.
+Status: implemented and verified locally on Mac and in fresh hosted Mac/Linux
+builds. [STATUS.md](STATUS.md) records failures, corrections and the exact tested
+revision; the scope below remains a private-network regression gate.
 
 ## Purpose and boundary
 

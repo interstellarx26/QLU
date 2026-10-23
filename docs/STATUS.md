@@ -50,8 +50,8 @@ milestone sources. Source and normal binary fingerprints matched before/after;
 the existing node binary was reused locally because production sources did not
 change. Evidence is ignored under `.local/evidence/p2p-resilience-<attempt>.json`,
 with `p2p-resilience-local-adapter-fixed.log` and
-`p2p-resilience-unit-python{312,314}-final.log`. Hosted Mac/Linux clean builds and
-the expanded 14-drill workflow are pending for the implementation revision.
+`p2p-resilience-unit-python{312,314}-final.log`. The final hosted results for the
+corrected implementation revision are recorded below.
 
 The first hosted Mac job in
 [run 40018542678](https://github.com/interstellarx26/QLU/actions/runs/40018542678),
@@ -74,8 +74,37 @@ rules remain unchanged. Separate review found no blocker. The failed platform
 log and compact review are retained under `.local/evidence/p2p-ci-40018542678-*`.
 After this repair, all **674 Python tests passed without skips** in both local
 environments, recorded in `p2p-resilience-timer-fix-python312.log` and
-`p2p-resilience-timer-fix-python314.log`. A fresh hosted matrix is required for
-the corrected revision; the superseded Linux attempt is not a passing result.
+`p2p-resilience-timer-fix-python314.log`. The initial Linux job was cancelled
+during its node build when the corrected revision superseded it. Both initial
+jobs completed cleanup; the cancelled Linux attempt is not a passing result.
+
+Hosted [run 40021443543](https://github.com/interstellarx26/QLU/actions/runs/40021443543)
+completed successfully on both `macos-15` and `ubuntu-24.04` at revision
+**`1db18b085e31597fb2b90c62979558551f06e80b`**. Each platform passed all **674
+Python tests without skips**, **154 executed core tests**, and **all 14 live
+private-network drills**. The Mac also passed **70 native wallet-model checks**.
+Each core suite skipped the same optional external `script_assets_tests` corpus;
+it is not included among the 154 executed tests. Native input safety passed
+10,761 negative cases plus 8 valid controls and 59 malformed helper requests plus
+34 valid controls on each OS, including the expected deliberate-fault probes.
+
+Hosted P2P attempts were **`687e245a4baf4ba8a91426e546ffbb2f`** on Mac and
+**`d8bb34f71b1e44109fe8b117f0c3e7e6`** on Linux. Each passed the same 48 wire
+cases, 12 hybrid rejections, 8 client-closed partial frames, 4 valid framing
+controls and 4 confirmed payments. All-node accounting, exact payment persistence
+and replay checks passed. All 22 source hashes match the tested commit and local
+trial; the fixed corpus SHA-256 is
+`8eb59a77b15e35f6722c936983636f9b173f4e4dbae71c3e8c306e3d907ed07a`.
+Both jobs completed cleanup and reported all eight QLU laboratory ports free.
+
+The combined review is `.local/evidence/p2p-ci-40021443543-review.json`, with
+preserved platform logs `p2p-ci-40021443543-{macos,linux}.log`. Hosted review
+checks the console proof records, exact-commit source hashes, assertions and
+accounting; it does not independently reread ephemeral hosted node logs or raw
+transactions. The local review additionally matched all 84 rejection-evidence
+line hashes against the disposable node logs and independently verified both
+signatures of all four public test payments. Four protected user files still
+match their before-test hashes, and the existing normal node binary is unchanged.
 
 This fixed corpus is bounded to 600 seconds of work, small payloads and limited
 per-node traffic. It does not establish v2 transport safety, sustained hostile
@@ -1152,9 +1181,11 @@ existed, and the final test checks no chain files or RPC cookies instead.
   still use disposable plaintext seed files. Python cannot guarantee secret-memory
   erasure. Restoration does not revoke stolen key copies.
 - No RandomX, production issuance/difficulty rules, public testnet/mainnet or paid cloud API.
-- No sustained hostile-network/fuzzing/sanitizer runs, full upstream Python functional suite,
-  full cross-platform recovery matrix, cross-implementation signature verification, mobile measurements,
-  reproducible signed release or independent specialist security audit yet.
+- Fixed peer-message, cross-implementation signature and targeted native sanitizer
+  checks are documented above. Broader sustained hostile-network testing,
+  coverage-guided fuzzing, full-node sanitizers, the full upstream Python functional
+  suite, the complete device recovery matrix, mobile measurements, reproducible
+  signed releases and independent specialist security audit remain outstanding.
 - CI builds the required OpenSSL on Linux and verifies dependency selection before
   Python tests that need the native signer. It also includes the encrypted-wallet
   and wallet-app private-network drills. Hosted results above apply to their
@@ -1162,6 +1193,6 @@ existed, and the final test checks no chain files or RPC cookies instead.
 - Host macOS 27 / selected SDK 26.5; locally installed OpenSSL/libevent target macOS 27 and
   generate linker warnings. Local success does not demonstrate compatibility with older Macs.
 
-Next: harden and broaden the measured protocol, test independent implementations and the remaining platforms,
+Next: harden and broaden the measured protocol and independent checks on the remaining platforms,
 then design HD rotation, hardware-backed custody and RandomX/economics as separately reviewed milestones.
 The [historical stage-0 report](STATUS-FOUNDATION.md) preserves the earlier foundation evidence.
