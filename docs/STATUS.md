@@ -10,14 +10,15 @@ Test coins have no value. Both laboratory networks are stopped after tests.
 ## Independent hybrid payment checks — 2026-10-23
 
 The [independent conformance milestone](INDEPENDENT_CONFORMANCE.md) is implemented
-and passed locally. Separate Python ML-DSA-65 and BIP340 implementations agree
+and passed locally and in clean hosted Mac and Linux builds. Separate Python
+ML-DSA-65 and BIP340 implementations agree
 with QLU's native key derivation, address, transaction encoding and authorization
 digests. Frozen public synthetic vectors exercise two inputs and both signature
 paths. Standalone preflight checks 19 official BIP340 cases, five NIST ML-DSA-65
 cases, vendor hashes, all 20 installed reference-package Python files and the
 selected SHAKE backend before starting nodes.
 
-**600 Python tests passed without skips** in both local isolated environments
+The initial **600 Python tests passed without skips** in both local isolated environments
 (Python 3.12.13 and 3.14.6), including 38 new checks. The live drill passed all
 seven checks on four fresh localhost `qludev` nodes: native signatures verified
 by the separate reference, an independently signed two-input payment confirmed
@@ -47,8 +48,8 @@ sources. Source, binary and installed-reference hashes matched before and after.
 The frozen corpus SHA-256 is
 `978626cc766564711adba46eb5bb8ebdb84cc93dd78bd6a488f4d6bca2f42542`.
 All fixture nodes stopped, all eight private ports were free, and all four
-protected user vault/backup/history files retained their hashes. Exact-revision
-hosted Mac and Linux results are pending at this implementation commit.
+protected user vault/backup/history files retained their hashes. Hosted results,
+including the initial failure and corrected exact-revision pass, follow below.
 
 The first hosted [run 39915299756](https://github.com/interstellarx26/QLU/actions/runs/39915299756),
 at `fb0fa5a30becd3ca163dd4691c4cf8ba41215e5c`, passed Mac compilation,
@@ -98,8 +99,29 @@ passed the expanded **607-test suite without skips**, including seven new
 regressions for header preparation and transport diagnostics. Final logs are
 `conformance-unit-python312-final.log` and `conformance-unit-python314-final.log`.
 All four protected user files retained their hashes. Separate review found no remaining
-blocker in the scoped test-controller correction. Both hosted platforms must be
-checked again at its published revision.
+blocker in the scoped test-controller correction.
+
+The corrected implementation, **`70661ad861f0adb816068a81ec3d9b7cd8b8beb2`**, passed
+hosted [run 39918524359](https://github.com/interstellarx26/QLU/actions/runs/39918524359)
+on October 23. Both Ubuntu 24.04 and macOS 15 completed successfully with
+**607 Python tests and no Python skips**, **154 executed core tests**, all
+**13 private-network drills/workloads**, and cleanup. The optional
+`script_assets_tests` target was skipped because its external corpus was not
+configured; it is not counted as an executed pass. Mac additionally passed
+**70 native wallet model checks**.
+
+The independent conformance attempts were
+`b4b90895c6ce4c5298f2d105ee6be378` on Linux and
+`d30cf2ce782344a3b55ca61c9f418566` on Mac. Each passed all seven live checks,
+14 negative cases on every one of four admission and block validators, and two
+confirmed payments. Each also passed the 24 official primitive cases and checked
+the same frozen corpus and pinned reference-package fingerprints. All owned
+nodes stopped and all eight private ports were free. The corrected resilience
+drill passed all 18 checks on both platforms. Full final logs are retained under
+ignored `.local/evidence/conformance-hosted-final-linux-job.log` and
+`conformance-hosted-final-macos-job.log`. A final local preservation check again
+confirmed the four protected user files were unchanged. Subsequent documentation-only
+result recording does not change the implementation tested in this run.
 
 This is bounded interoperability evidence for private hybrid spending. The
 independent reference is test-only, is not constant time, and must never process

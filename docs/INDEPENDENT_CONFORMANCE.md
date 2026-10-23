@@ -51,7 +51,9 @@ signing path stays unchanged.
 Only fresh disposable data directories under ignored `.local/` are used. The
 shared private-port lock, exact localhost settings, genesis checks and owned
 process controls remain in force. Existing wallets, backups and node data are
-not read or modified. Public corpus seeds are conspicuously marked as test-only;
+not used by the drill or modified. Separate preservation checks compare file
+hashes without opening a wallet or using its keys. Public corpus seeds are
+conspicuously marked as test-only;
 live synthetic seeds stay in memory or bounded helper stdin. No RPC receives
 private seeds. Failure reports must not echo secret inputs or backend diagnostics.
 
