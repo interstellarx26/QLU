@@ -19,7 +19,6 @@ import time
 import weakref
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
 
 # Existing protocol helpers use direct imports internally. Resolve them from
 # this checkout for both package imports and the command-line wallet.
@@ -28,6 +27,7 @@ import protocol
 import recovery
 import backup_verification
 from vault_kdf_lock import ARGON2_LOCK
+import vault_kdf
 
 
 MAX_VAULT_BYTES = 8192
@@ -57,11 +57,7 @@ def _passphrase(value: str) -> bytes:
 
 
 def _derive(passphrase: bytes, salt: bytes) -> bytes:
-    # Hosted native backends stalled when two threads derived concurrently.
-    # Serialize only native KDF entry; wallet publication retains its own race
-    # checks; KDF parameters and the stored format are unchanged.
-    with ARGON2_LOCK:
-        return Argon2id(salt=salt, length=32, iterations=3, lanes=4, memory_cost=65536).derive(passphrase)
+    return vault_kdf.derive(passphrase, salt)
 
 
 def _wallet_identity(wallet: dict) -> dict:

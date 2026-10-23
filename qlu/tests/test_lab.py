@@ -66,6 +66,9 @@ class PrivatePortLockTests(unittest.TestCase):
     def test_directory_symlink_refused_without_modifying_target(self):
         outside = self.root / "outside"
         outside.mkdir(mode=0o755)
+        # Establish the fixture's exact starting mode regardless of the
+        # caller's umask; the assertion below verifies it stays unchanged.
+        outside.chmod(0o755)
         self.directory.symlink_to(outside, target_is_directory=True)
         with self.assertRaises(DevnetError), lab.private_port_lock(self.root):
             self.fail("symlink directory accepted")

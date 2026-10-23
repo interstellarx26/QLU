@@ -9,3 +9,6 @@ import threading
 
 
 ARGON2_LOCK = threading.Lock()
+# A child that could not be reaped within bounded cleanup prevents another
+# native operation until its exit is observed while holding ARGON2_LOCK.
+QUARANTINED_CHILD = None

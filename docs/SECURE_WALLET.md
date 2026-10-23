@@ -17,15 +17,19 @@ signatures, or portable recovery format. It is not a public wallet release.
   binds its algorithm parameters, network, genesis, and signing policy. Unknown
   fields, versions, changed costs, malformed encodings, and oversized files are
   rejected before expensive work. There is no weaker fallback.
-- **Concurrent password derivation:** one shared process-local gate serializes
-  construction and execution of the Argon2id backend. Script and package imports
-  use the same gate. Hosted tests observed two simultaneous derivations stuck
-  inside the native backend; this mitigation does not identify an upstream cause.
-  Memory cost, passes, lanes, derived bytes, and encrypted formats are unchanged.
-  The gate is released on errors and before atomic file publication, so competing
-  creations still prove that exactly one can publish a destination. Workers start
-  fresh executable processes; reusing wallet state after a bare fork without exec
-  is unsupported. This gate does not establish a timeout for a single native call.
+- **Bounded password derivation:** Argon2id runs in a fresh isolated helper
+  interpreter using the same pinned environment. One shared process-local gate
+  serializes helpers across script and package imports. A 15-second monotonic
+  deadline includes waiting for that gate, sending the request, receiving the
+  result and waiting for normal exit. The parent stops a stalled helper rather
+  than leaving an uninterruptible native call in the wallet process. It never
+  automatically retries, reduces encryption costs, or changes the vault format.
+  See [the timeout design and verification requirements](WALLET_KDF_TIMEOUT.md).
+  Hosted tests previously observed two simultaneous derivations stuck inside
+  the native backend; this mitigation does not establish an upstream cause.
+  The gate is released before atomic file publication, so competing creations
+  still prove that exactly one can publish a destination. Reusing wallet state
+  after a bare fork without exec is unsupported.
 - **Files:** the vault is an immutable encrypted file. Creation publishes a
   complete, flushed file atomically without replacing an existing destination.
   Private files use restrictive permissions and reject unsafe paths, symlinks,

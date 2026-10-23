@@ -15,7 +15,6 @@ import unittest
 from unittest.mock import patch
 import weakref
 
-from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from qlu import vault
@@ -77,10 +76,10 @@ class VaultTests(unittest.TestCase):
 
     def test_real_kdf_configuration_and_no_password_normalization(self):
         salt = bytes(range(16))
-        with patch.object(vault, "Argon2id", wraps=vault.Argon2id) as constructor:
-            key = vault._derive(PASSPHRASE.encode(), salt)
-        self.assertEqual(len(key), 32)
-        constructor.assert_called_once_with(salt=salt, length=32, iterations=3, lanes=4, memory_cost=65536)
+        key = vault._derive(b"QLU public derivation vector v1", salt)
+        # Pinned before process isolation, independently computed using the
+        # existing Argon2id parameters rather than this transport implementation.
+        self.assertEqual(key.hex(), "35c57890ea5bf58fedf05dfeffd7361c9bd5830f5e20b5f81a797bee18cc1cc3")
         phrase = "  cafe\u0301 beside the river  "
         target = self.root / "unicode.qlu"
         created = self.keep(vault.WalletSession.create(target, phrase))
@@ -91,68 +90,50 @@ class VaultTests(unittest.TestCase):
         created.unlock(phrase)
         self.assertFalse(created.locked)
 
-    def test_native_kdf_construction_waits_for_an_active_derivation(self):
+    def test_native_helper_waits_for_an_active_derivation_across_imports(self):
         # CLI tooling uses the direct name; package clients use qlu.vault.
         import vault as direct_vault
+        self.assertIs(vault.vault_kdf, direct_vault.vault_kdf)
         entered, release, second_started, second_entered = (threading.Event() for _ in range(4))
         calls = []
 
-        class ControlledKDF:
-            def __init__(self, **kwargs):
-                calls.append(kwargs)
-                self.first = len(calls) == 1
-                if not self.first:
-                    second_entered.set()
-
-            def derive(self, phrase):
-                if self.first:
-                    entered.set()
-                    if not release.wait(3):
-                        raise RuntimeError("KDF test release timed out")
-                return phrase.ljust(32, b"\x00")
+        def controlled_worker(phrase, salt, deadline):
+            calls.append((phrase, salt))
+            if len(calls) == 1:
+                entered.set()
+                if not release.wait(3):
+                    raise RuntimeError("KDF test release timed out")
+            else:
+                second_entered.set()
+            return phrase.ljust(32, b"\x00")
 
         def second_derivation():
             second_started.set()
             return direct_vault._derive(b"second", b"b" * 16)
 
-        with patch.object(vault, "Argon2id", ControlledKDF), \
-                patch.object(direct_vault, "Argon2id", ControlledKDF), ThreadPoolExecutor(max_workers=2) as pool:
+        with patch.object(vault.vault_kdf, "_run_worker", controlled_worker), ThreadPoolExecutor(max_workers=2) as pool:
             first = pool.submit(vault._derive, b"first", b"a" * 16)
             try:
                 self.assertTrue(entered.wait(2))
                 second = pool.submit(second_derivation)
                 self.assertTrue(second_started.wait(2))
-                self.assertFalse(second_entered.wait(0.2), "Overlapping native KDF entry")
+                self.assertFalse(second_entered.wait(0.2), "Overlapping native KDF helper")
             finally:
                 release.set()
             self.assertEqual(first.result(timeout=2), b"first".ljust(32, b"\x00"))
             self.assertEqual(second.result(timeout=2), b"second".ljust(32, b"\x00"))
         self.assertTrue(second_entered.is_set())
-        self.assertEqual(calls, [
-            dict(salt=b"a" * 16, length=32, iterations=3, lanes=4, memory_cost=65536),
-            dict(salt=b"b" * 16, length=32, iterations=3, lanes=4, memory_cost=65536),
-        ])
+        self.assertEqual(calls, [(b"first", b"a" * 16), (b"second", b"b" * 16)])
 
     def test_native_kdf_failure_does_not_block_a_later_wallet_operation(self):
-        for fail_during in ("construction", "derivation"):
-            class FailingKDF:
-                def __init__(self, **kwargs):
-                    if fail_during == "construction":
-                        raise UnsupportedAlgorithm("synthetic unavailable KDF")
-
-                def derive(self, phrase):
-                    raise UnsupportedAlgorithm("synthetic unavailable KDF")
-
-            with self.subTest(fail_during=fail_during), patch.object(vault, "Argon2id", FailingKDF):
-                with self.assertRaises(UnsupportedAlgorithm):
-                    vault._derive(b"first", b"a" * 16)
-            # Bound the failed-release regression itself; an executor would
-            # otherwise wait forever for a worker stuck on the held gate.
-            acquired = vault.ARGON2_LOCK.acquire(timeout=1)
-            self.assertTrue(acquired, "Failed native KDF retained the shared gate")
-            vault.ARGON2_LOCK.release()
-            key = vault._derive(b"second", b"b" * 16)
-            self.assertEqual(len(key), 32)
+        with patch.object(vault.vault_kdf, "_run_worker", side_effect=OSError("private backend details")):
+            with self.assertRaisesRegex(vault.vault_kdf.DerivationError, "^Password derivation failed$"):
+                vault._derive(b"first", b"a" * 16)
+        # The failure regression itself must never wait forever on a held gate.
+        acquired = vault.ARGON2_LOCK.acquire(timeout=1)
+        self.assertTrue(acquired, "Failed native KDF retained the shared gate")
+        vault.ARGON2_LOCK.release()
+        self.assertEqual(len(vault._derive(b"second", b"b" * 16)), 32)
 
     def test_constructor_and_explicit_lock_gate_all_operations(self):
         operations = (self.session.public_keys, self.session.address, self.session.backup,
@@ -304,7 +285,7 @@ class VaultTests(unittest.TestCase):
             self.session.unlock(PASSPHRASE)
 
     def test_unsupported_argon_provider_fails_closed(self):
-        with patch.object(vault, "Argon2id", side_effect=UnsupportedAlgorithm("provider details must stay private")):
+        with patch.object(vault.vault_kdf, "_run_worker", side_effect=OSError("provider details must stay private")):
             with self.assertRaises(vault.VaultError) as error:
                 self.session.unlock(PASSPHRASE)
             self.assertTrue(self.session.locked)

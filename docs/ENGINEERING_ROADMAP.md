@@ -32,6 +32,8 @@ weaken payment authorization, recovery requirements or honest status reporting.
    preserves exact authorized bytes for explicit review and resumption across
    process restarts; legacy records without those bytes remain conservative.
    Absence alone cannot clear a payment or authorize a replacement.
+   [Bounded password derivation](WALLET_KDF_TIMEOUT.md) isolates native encryption
+   work so a stalled helper cannot indefinitely trap wallet unlock or recovery.
 3. **Measured protocol and mining design.** Benchmark hybrid verification, block
    propagation, storage and denial-of-service limits on documented hardware.
    Evaluate CPU-oriented mining, fair launch, supply and difficulty with explicit

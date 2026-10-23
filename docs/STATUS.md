@@ -7,6 +7,51 @@ AND Schnorr spending, encrypted working-wallet storage and recovery, and restore
 spending on four loopback nodes.
 Test coins have no value. Both laboratory networks are stopped after tests.
 
+## Password-helper timeout and recovery — 2026-10-22
+
+Native Argon2id derivation now runs in a fresh isolated helper with a shared
+15-second queue/execution deadline and bounded private pipes. A hung, malformed
+or failed helper is stopped and reaped; an unreaped child blocks new helpers
+until its exit is observed. Failed unlock revokes prior authority; failed
+derivation during create/restore publishes no vault. Encryption costs, the
+v1 vault format and recovery formats remain unchanged. See
+[the design, acceptance rules and limits](WALLET_KDF_TIMEOUT.md).
+
+**534 Python tests passed** in both the local Python 3.12.13 CI environment and
+the Python 3.14.6 app environment. Coverage includes a pre-change Argon2id vector,
+a literal old-format vault, real stalled/crashed/flooding children, bounded
+queue waiting, late exit, cancellation, quarantine and successful retry. A
+review found that interruption during cleanup could lose ownership of a live
+child; its regression failed before the fix and passed after ownership was
+retained throughout cleanup. An existing port-lock test also assumed a permissive
+umask; its fixture now explicitly sets its initial mode, preserving the same
+assertion that refusing a symlink must not alter the target's permissions.
+
+The fresh four-node fault drill passed **7 checks**. The unmodified 15-second
+deadline stopped a deliberately stalled helper in 15.003 seconds; three shorter
+test-only deadlines exercised other failure paths. All four helper children were
+already reaped by production cleanup. The drill verified no partial vaults, no
+payment side effects during password failure/retry, preserved wallet identity,
+backup receipt, history and pending guard across restart, and one explicit resume
+of the exact saved payment on all four nodes. Its final self-transfer balance
+was 0.99800000 test QLU. Source and binary hashes stayed unchanged and all eight
+private ports were free afterward.
+
+The normal encrypted-wallet recovery drill and remembered-backup restart drill
+also passed (8 and 7 checks respectively) using the app's Python environment.
+The four original user vault/backup/history files matched their existing SHA-256
+fingerprints after all local tests.
+
+Final fault-drill attempt: `99cca7c544324c4d8cfc8a87927046ea`, with private evidence
+in `.local/evidence/kdf-timeout-latest.json`. Full local suite logs are
+`.local/evidence/kdf-full-unit-final-python312.log` and
+`kdf-full-unit-final-python314.log`. The source kit includes the new helpers and
+tests; CI includes the real stalled-helper drill. Hosted results must be checked
+against the published revision. Independent agent review found no unresolved
+blocker; it is not a specialist security audit. Deadline enforcement requires a
+live controlling process and normal OS scheduling; abrupt parent termination can
+orphan a helper. No new physical-device or public-network claim is made.
+
 ## Hosted CI compatibility — 2026-10-22
 
 The first GitHub Actions run registered and built successfully on Ubuntu, then
@@ -29,7 +74,12 @@ still requires exactly one winner. Regression checks cover concurrent entry and
 gate release after failures. See [the design and limits](SECURE_WALLET.md).
 The cross-import concurrency regression failed against the previous code; all
 515 Python tests pass locally with the mitigation and the new recovery-kit helper.
-Hosted validation of the mitigation must complete before it is reported as passed.
+Hosted validation of that mitigation passed at commit
+`a223137736b80ee8b7185e305f6a6b75a0586870` in
+[run 39887926455](https://github.com/interstellarx26/QLU/actions/runs/39887926455):
+515 Python tests and 155 registered core tests on each OS, 70 native Mac model
+checks, every private-network drill and both cleanup steps. Later changes need
+their own validation; this result applies to that exact revision.
 Current hosted evidence is available in [GitHub Actions](https://github.com/interstellarx26/QLU/actions/workflows/qlu-foundation.yml);
 older milestone notes below describe the validation available at their own dates.
 All network exercises continue to use disposable loopback-only qludev/regtest nodes.

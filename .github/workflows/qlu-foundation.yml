@@ -169,6 +169,8 @@ jobs:
         run: python3 qlu/wallet_identity_smoke.py
       - name: Resume interrupted original payments across fresh processes
         run: python3 qlu/payment_resume_smoke.py
+      - name: Recover safely from stalled password helpers on private nodes
+        run: python3 qlu/kdf_timeout_smoke.py
       - name: Stop only the upstream laboratory's nodes
         if: always()
         run: python3 qlu/devnet.py stop
