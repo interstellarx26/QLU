@@ -53,6 +53,30 @@ with `p2p-resilience-local-adapter-fixed.log` and
 `p2p-resilience-unit-python{312,314}-final.log`. Hosted Mac/Linux clean builds and
 the expanded 14-drill workflow are pending for the implementation revision.
 
+The first hosted Mac job in
+[run 40018542678](https://github.com/interstellarx26/QLU/actions/runs/40018542678),
+at `f9ebee7732f07a52f4373d29f6e9971827109c77`, passed the native input-safety gate
+and node build, then ran all 671 Python tests with one failure in an existing
+wallet-device idle test. Its assertion assumed a timer callback would complete
+within roughly 33 ms after a shortened idle deadline. The hosted log shows the
+key reference had not cleared at that instant; it does not measure the exact
+scheduling delay. Both cleanup steps succeeded. The platform had not reached
+the live drills and is not counted as a passing Mac run.
+
+That test now joins the actual timer within a fixed two-second total bound,
+checks unchanged generation/deadline until expiry, and requires the raw key
+reference to clear before any status or key operation. Missing or ineffective
+timers still fail. Three added regressions exercise a deliberately delayed
+callback, missing/no-op timers, and refused signing after the monotonic deadline
+while the callback is delayed. Failure messages no longer print even a synthetic
+wallet. Only the test file changed; production wallet timing and authorization
+rules remain unchanged. Separate review found no blocker. The failed platform
+log and compact review are retained under `.local/evidence/p2p-ci-40018542678-*`.
+After this repair, all **674 Python tests passed without skips** in both local
+environments, recorded in `p2p-resilience-timer-fix-python312.log` and
+`p2p-resilience-timer-fix-python314.log`. A fresh hosted matrix is required for
+the corrected revision; the superseded Linux attempt is not a passing result.
+
 This fixed corpus is bounded to 600 seconds of work, small payloads and limited
 per-node traffic. It does not establish v2 transport safety, sustained hostile
 network capacity, full-node sanitizer coverage, general denial-of-service

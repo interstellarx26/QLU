@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import stat
 import tempfile
+import threading
 import time
 import unittest
 from unittest import mock
@@ -74,6 +75,48 @@ class WalletDeviceTests(unittest.TestCase):
                 self.instances.append(self)
         return Tracked
 
+    def timer_tracked_sessions(self):
+        class TimerTracked(self.tracked_sessions()):
+            def _schedule_locked(self, delay, generation):
+                super()._schedule_locked(delay, generation)
+                # Retain the real scheduled Timer even if it expires before
+                # the observer gets CPU time. This never touches authority.
+                self._test_idle_timer = (self._timer, generation, self._deadline)
+        return TimerTracked
+
+    def wait_for_independent_expiry(self, session, *, timeout=2):
+        """Join actual timer work without a status read or wallet operation."""
+        stop = time.monotonic() + timeout
+        with session._mutex:
+            scheduled = getattr(session, "_test_idle_timer", None)
+            self.assertTrue(scheduled is not None, "Idle timer was not scheduled")
+            timer, generation, deadline = scheduled
+        while True:
+            with session._mutex:
+                if session._wallet is not None:
+                    self.assertEqual(session._generation, generation, "Idle generation changed before expiry")
+                    self.assertEqual(session._deadline, deadline, "Idle deadline changed before expiry")
+            remaining = stop - time.monotonic()
+            self.assertTrue(remaining > 0, "Idle timer exceeded the completion bound")
+            timer.join(remaining)
+            self.assertFalse(timer.is_alive(), "Idle timer exceeded the completion bound")
+            with session._mutex:
+                if session._wallet is None:
+                    self.assertEqual(session._generation, generation + 1, "Idle expiry changed generation incorrectly")
+                    self.assertEqual(session._deadline, 0, "Idle expiry retained a deadline")
+                    self.assertTrue(session._timer is None, "Idle expiry retained a timer")
+                    return
+                self.assertEqual(session._generation, generation, "Idle generation changed before expiry")
+                self.assertEqual(session._deadline, deadline, "Idle deadline changed before expiry")
+                following = getattr(session, "_test_idle_timer", None)
+                # _expire may reschedule if a callback arrives early. It must
+                # retain the same generation/deadline and finish in this bound.
+                self.assertTrue(following is not None and following[0] is not timer,
+                                "Idle timer completed without clearing authority")
+                timer, next_generation, next_deadline = following
+                self.assertEqual(next_generation, generation, "Idle timer refreshed its generation")
+                self.assertEqual(next_deadline, deadline, "Idle timer refreshed its deadline")
+
     def run_ui(self, terminal, **kwargs):
         output, error = io.StringIO(), io.StringIO()
         with redirect_stdout(output), redirect_stderr(error):
@@ -139,21 +182,124 @@ class WalletDeviceTests(unittest.TestCase):
         self.assertFalse(self.response_path.exists())
 
     def test_idle_interval_has_no_key_operations_or_status_polling(self):
-        sessions = self.tracked_sessions()
+        sessions = self.timer_tracked_sessions()
         def wait(seconds):
-            session = sessions.instances[-1]
-            generation = session._generation
-            deadline = session._deadline
-            time.sleep(seconds / 3)
-            self.assertEqual(session._generation, generation)
-            self.assertEqual(session._deadline, deadline)
-            time.sleep(seconds)
-            # Timer independently clears the reference before locked property is read.
-            self.assertIsNone(session._wallet)
+            self.assertEqual(seconds, .1)
+            full_interval = time.monotonic() + seconds
+            # A completed timer must clear authority before observe_idle reads
+            # locked. Scheduler latency is bounded, not assumed to be <33 ms.
+            self.wait_for_independent_expiry(sessions.instances[-1])
+            # The timer was armed just before this observation started. Keep
+            # the requested full interval even if its callback has already run;
+            # this is not scheduling grace and cannot substitute for the join.
+            time.sleep(max(0, full_interval - time.monotonic()))
         with mock.patch.object(target.vault, "WalletSession", sessions):
             result = target.recover_sign(self.backup, self.code, PASS, self.challenge, self.vault_path,
                                          idle_seconds=.1, wait_for_idle=wait)
         target.validate_result(result, self.challenge)
+
+    def test_idle_observer_waits_for_a_delayed_real_callback(self):
+        entered, release, joining, finished = (threading.Event() for _ in range(4))
+        expire = target.vault._expire
+        errors = []
+        def delayed(reference, generation):
+            entered.set()
+            if release.wait(2):
+                expire(reference, generation)
+        sessions = self.timer_tracked_sessions()
+        session = sessions(self.vault_path, idle_seconds=.01)
+        def observe():
+            try:
+                self.wait_for_independent_expiry(session)
+            except BaseException as error:
+                errors.append(type(error).__name__)
+            finally:
+                finished.set()
+        observer = None
+        try:
+            with mock.patch.object(target.vault, "_expire", side_effect=delayed):
+                with session._mutex:
+                    session._wallet = object()  # No key material needed for timer lifecycle.
+                    session._touch_locked()
+                    timer, generation, deadline = session._test_idle_timer
+                self.assertTrue(entered.wait(2), "Delayed idle callback did not start")
+                real_join = timer.join
+                def joined(timeout):
+                    joining.set()
+                    real_join(timeout)
+                with mock.patch.object(timer, "join", side_effect=joined):
+                    observer = threading.Thread(target=observe, daemon=True)
+                    observer.start()
+                    self.assertTrue(joining.wait(2), "Idle observer did not join the real timer")
+                    self.assertFalse(finished.is_set(), "Idle observer returned before callback completion")
+                    with session._mutex:
+                        self.assertTrue(session._wallet is not None, "Delayed callback cleared authority before release")
+                        self.assertEqual(session._generation, generation)
+                        self.assertEqual(session._deadline, deadline)
+                    release.set()
+                    self.assertTrue(finished.wait(2), "Idle observer did not finish after callback release")
+                    self.assertEqual(errors, [], "Idle observer rejected completed expiry")
+                    self.assertTrue(session._wallet is None, "Completed idle callback retained authority")
+        finally:
+            release.set()
+            if observer is not None:
+                observer.join(2)
+            session.lock()
+            if hasattr(session, "_test_idle_timer"):
+                session._test_idle_timer[0].join(2)
+
+    def test_idle_observer_rejects_missing_or_ineffective_timers(self):
+        sessions = self.timer_tracked_sessions()
+        for missing in (True, False):
+            with self.subTest(missing=missing):
+                session = sessions(self.vault_path, idle_seconds=.01)
+                try:
+                    with mock.patch.object(target.vault, "_expire", return_value=None):
+                        with session._mutex:
+                            session._wallet = object()
+                            if not missing:
+                                session._touch_locked()
+                        expected = "Idle timer was not scheduled" if missing else "Idle timer completed without clearing authority"
+                        with self.assertRaisesRegex(AssertionError, expected):
+                            self.wait_for_independent_expiry(session)
+                        self.assertTrue(session._wallet is not None, "Observer itself cleared authority")
+                finally:
+                    session.lock()
+                    if hasattr(session, "_test_idle_timer"):
+                        session._test_idle_timer[0].join(2)
+
+    def test_deadline_blocks_signing_while_timer_callback_is_delayed(self):
+        entered, release = threading.Event(), threading.Event()
+        expire = target.vault._expire
+        def delayed(reference, generation):
+            entered.set()
+            if release.wait(2):
+                expire(reference, generation)
+        sessions = self.timer_tracked_sessions()
+        session = sessions(self.vault_path, idle_seconds=.01)
+        try:
+            with mock.patch.object(target.vault, "_expire", side_effect=delayed):
+                with session._mutex:
+                    session._wallet = object()
+                    session._touch_locked()
+                    timer, generation, deadline = session._test_idle_timer
+                self.assertTrue(entered.wait(2), "Delayed idle callback did not start")
+                with mock.patch.object(target.vault.time, "monotonic", return_value=deadline + 1), \
+                        mock.patch.object(target.vault.protocol, "sign_transaction") as sign:
+                    with self.assertRaisesRegex(target.vault.VaultError, "Wallet is locked"):
+                        session.sign(self.tx, [])
+                    sign.assert_not_called()
+                self.assertTrue(session._wallet is None, "Deadline gate retained authority")
+                self.assertEqual(session._generation, generation + 1)
+                self.assertEqual(session._deadline, 0)
+                release.set(); timer.join(2)
+                self.assertFalse(timer.is_alive(), "Delayed idle callback failed to finish")
+                self.assertEqual(session._generation, generation + 1, "Stale callback changed the locked generation")
+        finally:
+            release.set()
+            session.lock()
+            if hasattr(session, "_test_idle_timer"):
+                session._test_idle_timer[0].join(2)
 
     def test_wrong_code_or_mismatched_passphrase_never_creates_vault(self):
         for hidden in ([target.recovery.generate_recovery_code(), PASS, PASS],
