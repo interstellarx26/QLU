@@ -7,6 +7,19 @@ AND Schnorr spending, encrypted working-wallet storage and recovery, and restore
 spending on four loopback nodes.
 Test coins have no value. Both laboratory networks are stopped after tests.
 
+## Hosted CI compatibility — 2026-10-22
+
+The first GitHub Actions run registered and built successfully on Ubuntu, then
+hung during the Python wallet tests until the job timeout. The macOS 14 job
+failed earlier: its Xcode 15.4 compiler does not support the C++20 aggregate
+features used by the inherited source. Neither job passed the full suite.
+
+The workflow now selects macOS 15 with Xcode 26.3 and records the compiler version.
+Python tests retain every assertion and gain a five-minute fatal thread-stack
+dump plus a ten-minute step limit, so a repeated hang produces useful diagnostics.
+Hosted validation of these changes is pending; this is not a Linux hang fix.
+All network exercises continue to use disposable loopback-only qludev/regtest nodes.
+
 ## Interrupted original-payment recovery — 2026-10-22
 
 The wallet now durably saves the exact authorized transaction before broadcast.

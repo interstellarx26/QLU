@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-14]
+        os: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     defaults:
@@ -68,6 +68,10 @@ jobs:
       - name: Install macOS build dependencies
         if: runner.os == 'macOS'
         run: |
+          # The inherited C++20 code requires a newer compiler than Xcode 15.4.
+          sudo xcode-select --switch /Applications/Xcode_26.3.app/Contents/Developer
+          xcodebuild -version
+          xcrun --sdk macosx clang++ --version
           brew install cmake boost pkgconf libevent openssl@3 python@3.12
           echo "OPENSSL_ROOT_DIR=$(brew --prefix openssl@3)" >> "${GITHUB_ENV}"
           echo "$(brew --prefix python@3.12)/libexec/bin" >> "${GITHUB_PATH}"
@@ -125,7 +129,21 @@ jobs:
               print(name + "=" + entries[0])
           PY
       - name: Test controller safety, recovery, and encrypted wallets
-        run: python3 -m unittest discover -s qlu/tests -v
+        timeout-minutes: 10
+        run: |
+          python3 - <<'PY'
+          import faulthandler
+          import unittest
+          # A deadlock must produce thread stacks and fail, not consume the job.
+          faulthandler.enable()
+          faulthandler.dump_traceback_later(300, exit=True)
+          try:
+              result = unittest.TextTestRunner(verbosity=2).run(
+                  unittest.defaultTestLoader.discover("qlu/tests"))
+          finally:
+              faulthandler.cancel_dump_traceback_later()
+          raise SystemExit(0 if result.wasSuccessful() else 1)
+          PY
       - name: Test native wallet backup, focus cover and lock flow
         if: runner.os == 'macOS'
         run: python3 qlu/test_wallet_native.py
