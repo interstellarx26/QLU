@@ -27,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import protocol
 import recovery
 import backup_verification
+from vault_kdf_lock import ARGON2_LOCK
 
 
 MAX_VAULT_BYTES = 8192
@@ -56,7 +57,11 @@ def _passphrase(value: str) -> bytes:
 
 
 def _derive(passphrase: bytes, salt: bytes) -> bytes:
-    return Argon2id(salt=salt, length=32, iterations=3, lanes=4, memory_cost=65536).derive(passphrase)
+    # Hosted native backends stalled when two threads derived concurrently.
+    # Serialize only native KDF entry; wallet publication retains its own race
+    # checks; KDF parameters and the stored format are unchanged.
+    with ARGON2_LOCK:
+        return Argon2id(salt=salt, length=32, iterations=3, lanes=4, memory_cost=65536).derive(passphrase)
 
 
 def _wallet_identity(wallet: dict) -> dict:

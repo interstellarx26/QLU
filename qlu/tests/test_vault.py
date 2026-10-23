@@ -91,6 +91,69 @@ class VaultTests(unittest.TestCase):
         created.unlock(phrase)
         self.assertFalse(created.locked)
 
+    def test_native_kdf_construction_waits_for_an_active_derivation(self):
+        # CLI tooling uses the direct name; package clients use qlu.vault.
+        import vault as direct_vault
+        entered, release, second_started, second_entered = (threading.Event() for _ in range(4))
+        calls = []
+
+        class ControlledKDF:
+            def __init__(self, **kwargs):
+                calls.append(kwargs)
+                self.first = len(calls) == 1
+                if not self.first:
+                    second_entered.set()
+
+            def derive(self, phrase):
+                if self.first:
+                    entered.set()
+                    if not release.wait(3):
+                        raise RuntimeError("KDF test release timed out")
+                return phrase.ljust(32, b"\x00")
+
+        def second_derivation():
+            second_started.set()
+            return direct_vault._derive(b"second", b"b" * 16)
+
+        with patch.object(vault, "Argon2id", ControlledKDF), \
+                patch.object(direct_vault, "Argon2id", ControlledKDF), ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(vault._derive, b"first", b"a" * 16)
+            try:
+                self.assertTrue(entered.wait(2))
+                second = pool.submit(second_derivation)
+                self.assertTrue(second_started.wait(2))
+                self.assertFalse(second_entered.wait(0.2), "Overlapping native KDF entry")
+            finally:
+                release.set()
+            self.assertEqual(first.result(timeout=2), b"first".ljust(32, b"\x00"))
+            self.assertEqual(second.result(timeout=2), b"second".ljust(32, b"\x00"))
+        self.assertTrue(second_entered.is_set())
+        self.assertEqual(calls, [
+            dict(salt=b"a" * 16, length=32, iterations=3, lanes=4, memory_cost=65536),
+            dict(salt=b"b" * 16, length=32, iterations=3, lanes=4, memory_cost=65536),
+        ])
+
+    def test_native_kdf_failure_does_not_block_a_later_wallet_operation(self):
+        for fail_during in ("construction", "derivation"):
+            class FailingKDF:
+                def __init__(self, **kwargs):
+                    if fail_during == "construction":
+                        raise UnsupportedAlgorithm("synthetic unavailable KDF")
+
+                def derive(self, phrase):
+                    raise UnsupportedAlgorithm("synthetic unavailable KDF")
+
+            with self.subTest(fail_during=fail_during), patch.object(vault, "Argon2id", FailingKDF):
+                with self.assertRaises(UnsupportedAlgorithm):
+                    vault._derive(b"first", b"a" * 16)
+            # Bound the failed-release regression itself; an executor would
+            # otherwise wait forever for a worker stuck on the held gate.
+            acquired = vault.ARGON2_LOCK.acquire(timeout=1)
+            self.assertTrue(acquired, "Failed native KDF retained the shared gate")
+            vault.ARGON2_LOCK.release()
+            key = vault._derive(b"second", b"b" * 16)
+            self.assertEqual(len(key), 32)
+
     def test_constructor_and_explicit_lock_gate_all_operations(self):
         operations = (self.session.public_keys, self.session.address, self.session.backup,
                       lambda: self.session.sign(None, None),

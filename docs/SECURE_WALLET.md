@@ -17,6 +17,15 @@ signatures, or portable recovery format. It is not a public wallet release.
   binds its algorithm parameters, network, genesis, and signing policy. Unknown
   fields, versions, changed costs, malformed encodings, and oversized files are
   rejected before expensive work. There is no weaker fallback.
+- **Concurrent password derivation:** one shared process-local gate serializes
+  construction and execution of the Argon2id backend. Script and package imports
+  use the same gate. Hosted tests observed two simultaneous derivations stuck
+  inside the native backend; this mitigation does not identify an upstream cause.
+  Memory cost, passes, lanes, derived bytes, and encrypted formats are unchanged.
+  The gate is released on errors and before atomic file publication, so competing
+  creations still prove that exactly one can publish a destination. Workers start
+  fresh executable processes; reusing wallet state after a bare fork without exec
+  is unsupported. This gate does not establish a timeout for a single native call.
 - **Files:** the vault is an immutable encrypted file. Creation publishes a
   complete, flushed file atomically without replacing an existing destination.
   Private files use restrictive permissions and reject unsafe paths, symlinks,

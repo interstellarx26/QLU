@@ -17,7 +17,21 @@ features used by the inherited source. Neither job passed the full suite.
 The workflow now selects macOS 15 with Xcode 26.3 and records the compiler version.
 Python tests retain every assertion and gain a five-minute fatal thread-stack
 dump plus a ten-minute step limit, so a repeated hang produces useful diagnostics.
-Hosted validation of these changes is pending; this is not a Linux hang fix.
+The next hosted Mac and Linux builds passed. Both diagnostic traces then found
+the concurrent wallet-creation threads inside Argon2id derivation for five minutes. Local Python
+3.12 passed all 513 tests and 100 repetitions of that creation test, so the hosted
+trace supplied evidence that local runs did not reproduce.
+
+A shared gate now serializes only native Argon2id construction and derivation,
+including when script and package imports coexist. Encryption parameters and
+formats are unchanged; atomic publication still runs concurrently and the test
+still requires exactly one winner. Regression checks cover concurrent entry and
+gate release after failures. See [the design and limits](SECURE_WALLET.md).
+The cross-import concurrency regression failed against the previous code; all
+515 Python tests pass locally with the mitigation and the new recovery-kit helper.
+Hosted validation of the mitigation must complete before it is reported as passed.
+Current hosted evidence is available in [GitHub Actions](https://github.com/interstellarx26/QLU/actions/workflows/qlu-foundation.yml);
+older milestone notes below describe the validation available at their own dates.
 All network exercises continue to use disposable loopback-only qludev/regtest nodes.
 
 ## Interrupted original-payment recovery — 2026-10-22

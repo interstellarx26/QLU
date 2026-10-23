@@ -43,7 +43,7 @@ SCRIPT_HASHES = {"device_recovery_sha256": "qlu/device_recovery.py",
 RECOVERY_PROFILE = "recovery-v1"
 WALLET_PROFILE = "encrypted-wallet-v1"
 WALLET_SOURCE_FILES = (
-    "qlu/vault.py", "qlu/backup_verification.py", "qlu/wallet.py", "qlu/wallet_device.py",
+    "qlu/vault.py", "qlu/vault_kdf_lock.py", "qlu/backup_verification.py", "qlu/wallet.py", "qlu/wallet_device.py",
     "qlu/tests/test_vault.py", "qlu/tests/test_backup_verification.py", "qlu/tests/test_wallet.py", "qlu/tests/test_wallet_device.py",
     "docs/SECURE_WALLET.md", "docs/MACBOOK_WALLET_TEST.md",
 )
