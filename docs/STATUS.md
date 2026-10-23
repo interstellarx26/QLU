@@ -1,11 +1,70 @@
 # QLU private v1 status
 
-Updated: 2026-10-22 (America/Chicago; evidence timestamps are recorded in UTC).
+Updated: 2026-10-23 (America/Chicago; evidence timestamps are recorded in UTC).
 
 **Implemented and locally verified:** separate QLU development identity, mandatory ML-DSA-65
 AND Schnorr spending, encrypted working-wallet storage and recovery, and restored-key
 spending on four loopback nodes.
 Test coins have no value. Both laboratory networks are stopped after tests.
+
+## Repeated private payments and resource baseline — 2026-10-23
+
+The [fixed protocol workload](PAYMENT_WORKLOAD.md) passed **32 real transfers**
+in eight batches on four fresh loopback nodes. An independent expected ledger
+matched every outpoint, amount and script, each original signed transaction and
+block's exact bytes, and the whole-chain UTXO hash on all four nodes. Two graceful
+node restarts preserved that state. Submitting an original confirmed transaction
+again to all four nodes created no additional transaction, fee or balance change.
+
+The run crossed the existing laboratory halving at height 150. It read and checked
+all 149 setup rewards and eight workload rewards, including actual fees. Total
+subsidies and final UTXOs were 7,650 test QLU. The 32 payments paid 0.032 test QLU
+in fees, which returned through coinbases; fees were not mistaken for new issuance.
+These are temporary laboratory rules, not production economics.
+
+All **562 Python tests passed** in both the isolated Python 3.12.13 and app
+Python 3.14.6 environments, including 20 new workload checks. Negative tests cover
+changed witness bytes with the same transaction ID, missing/duplicate payments,
+double-used inputs, wrong fees/rewards/scripts, incorrect node state, unsafe
+fixture files, expired budgets, foreign processes and failed evidence writes.
+Separate agent review found no unresolved blocker. Its diagnostic finding was
+fixed: hosted failures retain a safe allowlisted summary even if writing the
+local evidence fails. This review is not an independent specialist audit.
+
+The local run used an Apple M4, 16 GiB, eight physical CPU cores, macOS 27.0.1,
+Python 3.14.6 and cryptography 50.0.2. Samples include helper/process startup,
+serialization, loopback RPC and polling; desktop load was uncontrolled.
+
+| Observation | Result | Scope |
+| --- | --- | --- |
+| One-input payment bytes | 5,462 | All 32 payments |
+| Four-payment block bytes | 22,110 | All eight workload blocks |
+| Signing median | 9.001 ms | 32 helper-inclusive samples |
+| Preflight median | 4.610 ms | 32 node-admission samples |
+| Broadcast RPC median | 4.614 ms | 32 samples, not confirmation |
+| All-mempool observation median | 4.452 s | Eight batches, polling included |
+| Mining RPC median | 8.137 ms | Eight on-demand laboratory blocks |
+| Same-tip observation after mining median | 17.624 ms | Eight batches, not finality |
+| Graceful stop/start/agreement | 0.711 s and 0.720 s | Two controlled restarts |
+| Largest observed per-node RSS | 59.875 MiB | Snapshots, not peak memory |
+| Four-node fixture after stop | 69.886 MiB logical; 3.402 MiB allocated | File sizes only; excludes directory metadata and evidence |
+
+No compilation or document rendering ran alongside this measurement. It is a
+short fixed protocol test, not a TPS benchmark, endurance soak, encrypted GUI or
+history-journal test, crash/power-loss test, internet measurement or production
+capacity claim. Its 100 MiB disk threshold is sampled, not a filesystem quota.
+
+Attempt `75669b08817447e385756438875aecce` ran from
+`2026-10-23T05:32:13.992046Z` to `2026-10-23T05:32:54.285175Z`.
+Evidence remains ignored under `.local/evidence/payment-workload-<attempt>.json`;
+full suite logs are `payment-workload-unit-python312-final.log` and
+`payment-workload-unit-python314-final.log`. The recorded Git base is
+`4ec966aec4f7c17428ab2be32ae2eeabaad9ba48` plus the new workload sources, whose
+before/after hashes match. The unchanged node executable SHA-256 is
+`b13126309cbb1bb8d088a05aeb38fb4e2861d7e492f22e0cea1b84c749260bcc`.
+All owned nodes stopped, all eight ports were free, and all four protected user
+vault/backup/history files retained their prior hashes. CI now includes the
+bounded workload on Mac and Linux; its hosted result needs exact-revision checking.
 
 ## Password-helper timeout and recovery — 2026-10-22
 
@@ -79,6 +138,13 @@ The final real-node resilience drill passed all **17 checks** in attempt
 `143249a96d934cbe937a5b466f1799b3`, with unchanged source/binary fingerprints,
 all owned nodes stopped and all eight ports free. Independent review found no
 blocker in the convergence fix. A fresh hosted run must validate this revision.
+
+That final revision, `4ec966aec4f7c17428ab2be32ae2eeabaad9ba48`, passed hosted
+[run 39901214881](https://github.com/interstellarx26/QLU/actions/runs/39901214881),
+checked October 23. Both Ubuntu 24.04 and macOS 15 passed **542 Python tests**,
+**155 registered core tests**, all private-network drills and cleanup. macOS
+also passed **70 native model checks**. This closes hosted validation of that
+revision, while leaving the original earlier failure's cause unproven.
 
 ## Hosted CI compatibility — 2026-10-22
 
@@ -800,7 +866,8 @@ existed, and the final test checks no chain files or RPC cookies instead.
   reproducible signed release or independent specialist security audit yet.
 - CI builds the required OpenSSL on Linux and verifies dependency selection before
   Python tests that need the native signer. It also includes the encrypted-wallet
-  and wallet-app private-network drills. It has not been run on hosted CI.
+  and wallet-app private-network drills. Hosted results above apply to their
+  exact revisions; the earlier stage-0 notes predate hosted execution.
 - Host macOS 27 / selected SDK 26.5; locally installed OpenSSL/libevent target macOS 27 and
   generate linker warnings. Local success does not demonstrate compatibility with older Macs.
 

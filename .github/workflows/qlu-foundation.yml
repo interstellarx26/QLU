@@ -171,6 +171,9 @@ jobs:
         run: python3 qlu/payment_resume_smoke.py
       - name: Recover safely from stalled password helpers on private nodes
         run: python3 qlu/kdf_timeout_smoke.py
+      - name: Verify repeated private payments, exact accounting and node restarts
+        timeout-minutes: 15
+        run: python3 qlu/payment_workload.py
       - name: Stop only the upstream laboratory's nodes
         if: always()
         run: python3 qlu/devnet.py stop

@@ -36,6 +36,10 @@ weaken payment authorization, recovery requirements or honest status reporting.
    work so a stalled helper cannot indefinitely trap wallet unlock or recovery.
 3. **Measured protocol and mining design.** Benchmark hybrid verification, block
    propagation, storage and denial-of-service limits on documented hardware.
+   The [bounded payment workload](PAYMENT_WORKLOAD.md) checks 32 real transfers,
+   exact reward and fee accounting, two graceful node restarts and harmless
+   replay of an already-confirmed payment. Its raw timing and resource samples
+   describe a short four-node laboratory run, not public-network capacity.
    Evaluate CPU-oriented mining, fair launch, supply and difficulty with explicit
    threat models and simulations. Current SHA-256 regtest mining is not RandomX
    or final economics. CPU availability alone does not guarantee fair mining.

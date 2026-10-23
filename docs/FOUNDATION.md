@@ -4,8 +4,10 @@ The original stage 0 baseline is preserved, alongside the [QLU private v1 experi
 `9be056a8a72b624dae9623b2f7bded92c2a21c91`. Source code was fetched directly from the official
 Bitcoin repository using its annotated release tag. The official release index, GitHub release
 API, and peeled tag agreed. A maintainer PGP signature has not been independently authenticated.
-The initial fetch is shallow, retains the upstream commit identity, and can be deepened later.
-The `upstream` remote is read-only in this workflow; nothing has been published.
+The initial stage-0 fetch was shallow. The current repository retains the full
+upstream ancestry and is [published as open source](OPEN_SOURCE.md); publishing
+source does not launch a public network. The `upstream` remote remains read-only
+in this workflow.
 
 ## Preserved upstream baseline
 

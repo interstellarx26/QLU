@@ -345,8 +345,11 @@ Pending destinations and delivery status are limited to the current app session
 and wallet. The save dialog initially opens Downloads; the user can choose a
 different destination.
 
-Quit normally to lock the wallet and stop its nodes. The current interface asks
-you to open and unlock your wallet and verify its backup again after relaunch.
+Quit normally to lock the wallet and stop its nodes. After relaunch, open and
+unlock the same wallet. A valid authenticated backup-verification receipt
+remembers the completed check; a missing, changed or invalid receipt requires
+verification again. The receipt proves a previous check, not continued possession
+of the backup or recovery code.
 The faucet has no persisted signing key: after restarting it may mine additional
 temporary development blocks. Eventually those temporary halving rules can
 exhaust its ability to provide another whole test coin; the app will report that
