@@ -45,6 +45,16 @@ transactions to isolated halves. This is fault injection outside the consumer
 wallet's send gate. The production wallet must refuse to authorize a new payment
 while the same split exists.
 
+Before deliberately invalidating competing fork blocks, the controller distributes
+the exact losing header captured while that block was active. Normal peer
+synchronization need not advertise a shorter branch to every node. The controller
+checks all four copies of the header, its parent/height/work and the unchanged
+higher-work winning tip before invalidation. This only establishes header knowledge
+for fault injection; it is not new block-validation or wallet-recovery behavior.
+Unexpected RPC results still fail. The CLI's empty success response is checked
+explicitly, and safe failure reports include a bounded numeric RPC code without
+backend messages or secrets.
+
 Each run records public transaction IDs, chain work, UTXO digests,
 assertions, source hashes and cleanup results under ignored `.local/`. The
 milestone verification also records node/CLI/keytool binary fingerprints separately.

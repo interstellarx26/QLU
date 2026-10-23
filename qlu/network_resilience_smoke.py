@@ -29,7 +29,7 @@ import recovery
 from wallet_app import WalletApp
 from wallet_app_network import WalletAppNetwork, _AppNet, NetworkError, format_amount
 from payment_history import PaymentHistory
-from test_framework.messages import CBlock, CTransaction, from_hex
+from test_framework.messages import CBlock, CBlockHeader, CTransaction, from_hex
 from test_framework.blocktools import add_witness_commitment
 
 GROUPS = ({0, 1}, {2, 3})
@@ -37,18 +37,66 @@ GROUPS = ({0, 1}, {2, 3})
 
 def failure_location(error):
     """No exception messages, source lines, local variables or absolute paths."""
-    return {'error_type': type(error).__name__,
-            'error_location': [{'file': Path(frame.filename).name, 'line': frame.lineno,
-                                'function': frame.name}
-                               for frame in traceback.extract_tb(error.__traceback__)]}
+    result = {'error_type': type(error).__name__,
+              'error_location': [{'file': Path(frame.filename).name, 'line': frame.lineno,
+                                  'function': frame.name}
+                                 for frame in traceback.extract_tb(error.__traceback__)]}
+    if isinstance(error, RpcError) and type(error.code) is int and -(2 ** 31) <= error.code < 2 ** 31:
+        result['rpc_error_code'] = error.code
+    return result
 
 
 def failure_summary(report):
     """Explicit public allowlist; never publish arbitrary future report fields."""
     names = ('attempt', 'started_at', 'completed_at', 'passed', 'checks',
-             'error_type', 'error_location', 'last_operations', 'controller_failures',
+             'error_type', 'error_location', 'rpc_error_code', 'last_operations', 'controller_failures',
              'cleanup', 'ports_free', 'source_unchanged', 'binaries_unchanged')
     return {name: report[name] for name in names if name in report}
+
+
+def share_known_losing_header(controller, losing_hash, losing_raw, winner_hash, losing_work, winning_work,
+                              *, expected_parent, expected_height):
+    """Make this drill's known losing header available before invalidating it.
+
+    Normal peer synchronization need not distribute a lower-work branch. The
+    header is captured on its producing node while that block is active.
+    Importing it here must not change the already established winning chain.
+    This establishes header knowledge, not full-block acceptance, and is fixture
+    preparation rather than a wallet or consensus recovery mechanism.
+    """
+    assert type(losing_hash) is str and re.fullmatch(r'[0-9a-f]{64}', losing_hash)
+    assert type(winner_hash) is str and re.fullmatch(r'[0-9a-f]{64}', winner_hash) and winner_hash != losing_hash
+    assert type(expected_parent) is str and re.fullmatch(r'[0-9a-f]{64}', expected_parent)
+    assert type(expected_height) is int and expected_height > 0
+    assert type(losing_raw) is str and re.fullmatch(r'[0-9a-f]{160}', losing_raw)
+    assert type(losing_work) is int and type(winning_work) is int and 0 < losing_work < winning_work
+    header = from_hex(CBlockHeader(), losing_raw)
+    assert header.hash_hex == losing_hash and header.serialize().hex() == losing_raw
+    assert f'{header.hashPrevBlock:064x}' == expected_parent
+
+    def check_winner(index):
+        state = controller.rpc(index, 'getblockchaininfo')
+        assert state['bestblockhash'] == winner_hash and int(state['chainwork'], 16) == winning_work
+
+    for index in range(4):
+        check_winner(index)
+    observations = []
+    for index in range(4):
+        # bitcoin-cli prints no output for JSON null; this controller returns
+        # the empty stdout string, rather than Python None, on success.
+        assert controller.rpc(index, 'submitheader', losing_raw) == ''
+        assert controller.rpc(index, 'getblockheader', losing_hash, False) == losing_raw
+        header = controller.rpc(index, 'getblockheader', losing_hash)
+        assert header['hash'] == losing_hash and header['confirmations'] == -1
+        assert header['previousblockhash'] == expected_parent and header['height'] == expected_height
+        assert int(header['chainwork'], 16) == losing_work
+        check_winner(index)
+        observations.append({'node': index, 'stored_header_verified': True, 'winning_tip_unchanged': True})
+    for index in range(4):
+        check_winner(index)
+    return {'losing_block': losing_hash, 'winning_tip': winner_hash,
+            'losing_chainwork': f'{losing_work:x}', 'winning_chainwork': f'{winning_work:x}',
+            'raw_header_sha256': hashlib.sha256(bytes.fromhex(losing_raw)).hexdigest(), 'nodes': observations}
 
 
 def identify_peers(peers, state, label, local, *, allow_incomplete=False):
@@ -555,6 +603,7 @@ def run():
 
         left_tip = controller.rpc(0, 'generateblock', left.address, [raws[0]])['hash']
         controller.group_synced({0, 1}, left_tip)
+        left_header_raw = controller.rpc(0, 'getblockheader', left_tip, False)
         winning_block = controller.rpc(2, 'generateblock', left.address, [raws[1]])['hash']
         controller.group_synced({2, 3}, winning_block)
         right_tip = controller.rpc(2, 'generateblock', left.address, [])['hash']
@@ -662,6 +711,10 @@ def run():
         # Invalidating only the winner would activate the other signed fork.
         # Invalidate both fixture fork blocks so the original chain input really
         # returns. The winner can remain in the mempool; that is not chain proof.
+        report['observations']['losing_header_distribution'] = share_known_losing_header(
+            controller, left_tip, left_header_raw, right_tip, work_left, work_right,
+            expected_parent=common_tip, expected_height=start_height + 1)
+        report['checks']['known_losing_fixture_header_shared_without_changing_winning_chain'] = True
         for index in range(4):
             controller.rpc(index, 'invalidateblock', left_tip)
             controller.rpc(index, 'invalidateblock', winning_block)

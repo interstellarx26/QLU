@@ -50,6 +50,57 @@ All fixture nodes stopped, all eight private ports were free, and all four
 protected user vault/backup/history files retained their hashes. Exact-revision
 hosted Mac and Linux results are pending at this implementation commit.
 
+The first hosted [run 39915299756](https://github.com/interstellarx26/QLU/actions/runs/39915299756),
+at `fb0fa5a30becd3ca163dd4691c4cf8ba41215e5c`, passed Mac compilation,
+all 600 Python tests, 70 native model checks and 154 executed core targets
+(one optional external-corpus target skipped), then failed the existing
+network-resilience drill at its `invalidateblock(left_tip)` call. Its first
+11 checks, including partitioning, higher-work convergence and verified conflict
+resolution, passed; cleanup stopped all owned nodes and released all ports.
+The new live conformance drill was therefore skipped on that Mac attempt.
+The safe diagnostic records an RPC failure at the losing-branch invalidation,
+but did not include its numeric RPC code, so the exact hosted cause is not proven.
+The complete failed log remains in ignored local evidence.
+
+That run's Linux job passed completely: 600 Python tests, 154 executed core
+targets with the same optional skip, every live drill and cleanup. Its conformance
+attempt `80b435b266a94313b8d036583e3b67cb` passed all seven checks, all 14 negative
+cases on four nodes and both confirmed payments. This Linux pass does not close
+the failed Mac job.
+
+A controlled four-node reproduction established the missing-header precondition:
+with peer groups isolated, only the winning branch was transported to the other
+group. All four nodes agreed on the winning tip, but the two right-side nodes
+rejected invalidation of the undistributed losing header with RPC code `-5`.
+The test controller now captures that exact 80-byte header while active, delivers
+and verifies it on every node before invalidation, and checks that the winning
+tip and work do not change. Existing reorg, restored-input and stale-preview
+authorization assertions remain unchanged. This repairs the demonstrated test
+assumption; the original hosted RPC code was not recorded and is not inferred
+as an observed result.
+
+The first local helper integration failed because it expected Python `None` for
+a successful `submitheader`; the existing command-line transport returns empty
+text for JSON null. The helper and its tests now require that exact representation,
+including a regression through the actual RPC decoder. The original failed local
+reproduction and drill logs are retained. Future public failure diagnostics add
+only a bounded integer RPC code, never backend message text.
+
+The corrected controlled reproduction passed three checks in attempt
+`b57d45f2a6344e009b6e96d8a68ff02a`: missing headers demonstrably fail before the
+preparation, delivery preserves the winning chain, and both invalidations return
+all four nodes to the common tip. The complete resilience drill then passed all
+**18 checks** in attempt `c8aff99d79d542968f9a0eb840e7b7ad`, with unchanged
+source/binary hashes and clean shutdown. Logs are
+`.local/evidence/missing-losing-header-live-final.log` and
+`conformance-resilience-final-local.log`. Both local Python environments then
+passed the expanded **607-test suite without skips**, including seven new
+regressions for header preparation and transport diagnostics. Final logs are
+`conformance-unit-python312-final.log` and `conformance-unit-python314-final.log`.
+All four protected user files retained their hashes. Separate review found no remaining
+blocker in the scoped test-controller correction. Both hosted platforms must be
+checked again at its published revision.
+
 This is bounded interoperability evidence for private hybrid spending. The
 independent reference is test-only, is not constant time, and must never process
 real wallet keys. It does not establish an audited hybrid construction,
