@@ -75,12 +75,13 @@ jobs:
           brew install cmake boost pkgconf libevent openssl@3 python@3.12
           echo "OPENSSL_ROOT_DIR=$(brew --prefix openssl@3)" >> "${GITHUB_ENV}"
           echo "$(brew --prefix python@3.12)/libexec/bin" >> "${GITHUB_PATH}"
-      - name: Create isolated recovery environment
+      - name: Create isolated recovery and conformance test environment
         run: |
           umask 077
           mkdir -p .local/evidence
           python3 -m venv .local/ci-venv
           .local/ci-venv/bin/python -m pip install --disable-pip-version-check --require-hashes --only-binary=:all: -r qlu/recovery-requirements.txt
+          .local/ci-venv/bin/python -m pip install --disable-pip-version-check --require-hashes --only-binary=:all: --no-deps -r qlu/conformance-requirements.txt
           .local/ci-venv/bin/python -m pip check
           echo "${GITHUB_WORKSPACE}/.local/ci-venv/bin" >> "${GITHUB_PATH}"
       - name: Verify and record cryptographic dependencies
@@ -174,6 +175,9 @@ jobs:
       - name: Verify repeated private payments, exact accounting and node restarts
         timeout-minutes: 15
         run: python3 qlu/payment_workload.py
+      - name: Verify independent hybrid signatures on four private nodes
+        timeout-minutes: 15
+        run: python3 qlu/conformance_smoke.py
       - name: Stop only the upstream laboratory's nodes
         if: always()
         run: python3 qlu/devnet.py stop

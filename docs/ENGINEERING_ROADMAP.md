@@ -47,6 +47,9 @@ weaken payment authorization, recovery requirements or honest status reporting.
    supported phones against common recovery/signature vectors and real device
    trials. Build signed, reproducible distribution and stronger live-key custody.
    A test on one Mac does not establish portability or resistance to malware.
+   [Independent payment conformance](INDEPENDENT_CONFORMANCE.md) defines a bounded
+   cross-implementation check of the existing hybrid rules, portable synthetic
+   cases and reverse signature validation through private-node consensus.
 5. **Consumer experience and developer infrastructure.** Add authenticated
    contact/payment-request flows with clear identity and recovery tradeoffs.
    Build optional Vibex Developer Cloud read APIs, usage metering and business

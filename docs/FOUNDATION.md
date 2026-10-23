@@ -35,6 +35,7 @@ python3 qlu/build.py build --jobs 2
 python3 qlu/build.py test --jobs 2
 python3 -m venv .local/recovery-venv
 .local/recovery-venv/bin/python -m pip install --require-hashes --only-binary=:all: -r qlu/recovery-requirements.txt
+.local/recovery-venv/bin/python -m pip install --require-hashes --only-binary=:all: --no-deps -r qlu/conformance-requirements.txt
 .local/recovery-venv/bin/python -m unittest discover -s qlu/tests -v
 .local/recovery-venv/bin/python qlu/private_net.py smoke
 python3 qlu/devnet.py smoke

@@ -1,0 +1,5 @@
+# Test-only independent ML-DSA reference; never a production wallet dependency.
+# Official PyPI 1.5.1 universal wheel; no mandatory transitive dependencies.
+# Install with pip --require-hashes --only-binary=:all: --no-deps -r qlu/conformance-requirements.txt
+dilithium-py==1.5.1 \
+    --hash=sha256:21ab0cbd56e959d22b9dca59bd8af0e2a6f73703b14ad71d483ecf70438c73d7

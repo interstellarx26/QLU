@@ -1,0 +1,63 @@
+{
+  "bip340": {
+    "repository": "https://github.com/bitcoin/bips",
+    "commit": "f98774a68c23269d9bfa78c8d9c4671ebf4ceb69",
+    "files": {
+      "bip340_reference.py": "bip-0340/reference.py",
+      "bip340_test_vectors.csv": "bip-0340/test-vectors.csv",
+      "bip340.LICENSE": "bip-0340/LICENSE"
+    }
+  },
+  "dilithium_py": {
+    "repository": "https://github.com/GiacomoPope/dilithium-py",
+    "commit": "23cb5ee9dd7fa15d9e3c17527e7964c58f3cc549",
+    "release": "1.5.1",
+    "wheel": "dilithium_py-1.5.1-py3-none-any.whl",
+    "wheel_sha256": "21ab0cbd56e959d22b9dca59bd8af0e2a6f73703b14ad71d483ecf70438c73d7",
+    "license_file": "dilithium_py.LICENSE",
+    "package_python_sha256": {
+      "dilithium_py/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "dilithium_py/dilithium/__init__.py": "41609f3643022d5491999af88e765f41c204d062362eeae5a113347b3683f8f3",
+      "dilithium_py/dilithium/default_parameters.py": "67aa0e048b589af1990177a24970b9a952bcc883e3c522e1b542ec21bba10964",
+      "dilithium_py/dilithium/dilithium.py": "99b3313cfa951c10b9e45534b958e749e7ddd3d055097f50684a193c739c6cfe",
+      "dilithium_py/drbg/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "dilithium_py/drbg/aes256_ctr_drbg.py": "42a77e577b9c370e4dd088ff53ae1cc8e24bcdfc9facf8e079345d697dbb90c0",
+      "dilithium_py/ml_dsa/__init__.py": "5020f6541f94b0f9319cb5cdf49c1b3b3df9490bddc7c048a127fa5503bd0838",
+      "dilithium_py/ml_dsa/default_parameters.py": "fb56d4e56a39bf35785ef63698666f22d1a4bd4ebd407b2773a914ad4ae41eba",
+      "dilithium_py/ml_dsa/hash_ml_dsa.py": "f9eb96779f1978218c211616ebec09d5e01150f190016f14a011e597f78ee829",
+      "dilithium_py/ml_dsa/ml_dsa.py": "fc4ab124f10bece25c5a3edd5e6b7200d44913c5b44f7711350e6095cee078d8",
+      "dilithium_py/ml_dsa/pkcs.py": "844baa09c81dc44e1bf3f6023766df74edc2b18390dd67abbc442406c6015ca9",
+      "dilithium_py/modules/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "dilithium_py/modules/modules.py": "57a33b9bb7cf7cb80a6f758b3700213341b2a8ae4ef341064585e78a01a74649",
+      "dilithium_py/modules/modules_generic.py": "670300a527f04790c447a13f41102d7b357b8c9e801cbffd13cdae06014d7b2d",
+      "dilithium_py/polynomials/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "dilithium_py/polynomials/polynomials.py": "0a65c04a9f40a5a7a4ccea3109221c0ce410cce5101151215f02b3efe26cd3d9",
+      "dilithium_py/polynomials/polynomials_generic.py": "ddcb34cee8bc553d977e0ba04ea6aa12c51466c520c90103ca9c99dd0291ae3e",
+      "dilithium_py/shake/shake_wrapper.py": "5a64cbcac64cb741a8ae92a5628ba10405a810048a337b2419f52911994d5ff5",
+      "dilithium_py/utilities/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "dilithium_py/utilities/utils.py": "028f9516b58f3bbfd57746ab58b747e6b6861637ca6140729255a9ddabc54cef"
+    }
+  },
+  "nist": {
+    "repository": "https://github.com/usnistgov/ACVP-Server",
+    "commit": "975de31eb83d87039ec88934fdc47d8c312b892d",
+    "extraction": "ML-DSA-65 keyGen tgId2 tcId26 without sk; sigGen tgId3 tcId31; sigVer tgId3 tcId31,32,33. Merge unchanged group metadata (except tests) with prompt test and expected test fields. Format JSON only. NIST license notice copied verbatim from README.md License section. 2026-10-23.",
+    "sources": {
+      "gen-val/json-files/ML-DSA-keyGen-FIPS204/prompt.json": "43e81ad820e495dbcad086fe27c1008393a8c32100bbbff77c558c3f06dcefef",
+      "gen-val/json-files/ML-DSA-keyGen-FIPS204/expectedResults.json": "361f47ca19d592adcc66ff2cb591686ad785fea157b295648738bed6921a68df",
+      "gen-val/json-files/ML-DSA-sigGen-FIPS204/prompt.json": "447749d72817b211160d243311ce32302f3023e59c355b0f70be2bd3e9e7830d",
+      "gen-val/json-files/ML-DSA-sigGen-FIPS204/expectedResults.json": "228d011bbe274aeb93e22eea1e0d57b78f43795cf6a64fb5ef1e626485a0bedb",
+      "gen-val/json-files/ML-DSA-sigVer-FIPS204/prompt.json": "e2cba4589389756fa0bea1a7e6837138bf0a81f9d14234c9ee8f6d33caa1654e",
+      "gen-val/json-files/ML-DSA-sigVer-FIPS204/expectedResults.json": "e1d84ef1b2f35196278ab0b0ed6a46ec62cc03d2dfa92c564199e1999bfb8ea6",
+      "README.md": "d5a569884ee83bd1c4737042d0a2cc7d68c6950690f75a73ef14f505a9aa3555"
+    }
+  },
+  "vendored_sha256": {
+    "nist.LICENSE": "8e6833bd6bd35dadd415147ba53a8eca4c3d31c53cb589e97abba6a4efd5b953",
+    "nist_mldsa65_subset.json": "de2bc8fc2a0be1160cb1219e2844fe3e5692904bdef69da1e443217260130474",
+    "bip340.LICENSE": "e4974cd8532036eda7e540a9930fee0c020cb297d455033232606298a89adbd4",
+    "bip340_reference.py": "4b1d4ad9e60820df4a6d239733d52b014bc03e4c47afd757a2fe4d3b586d892c",
+    "dilithium_py.LICENSE": "972b5fb73d94a9203debdcc84059106b6a2953baf09742291677caf5f231d087",
+    "bip340_test_vectors.csv": "34c9d1d9c3a88d524bc80778540dc43f8306ec249a7485293063c376db851c2d"
+  }
+}

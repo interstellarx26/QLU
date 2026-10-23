@@ -1,0 +1,2 @@
+# Preserve exact upstream bytes and provenance hashes, including original CRLF.
+* -text

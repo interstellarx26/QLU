@@ -18,6 +18,7 @@ proof of work, not RandomX. See the [publication scope](docs/OPEN_SOURCE.md).
 - [Build and private-network guide](docs/FOUNDATION.md)
 - [Current verification and next work](docs/STATUS.md)
 - [Measured private-network performance](docs/PERFORMANCE.md)
+- [Independent payment-signature checks](docs/INDEPENDENT_CONFORMANCE.md)
 - [Encrypted wallet and guided recovery](docs/SECURE_WALLET.md)
 - [Native Mac wallet app](docs/WALLET_APP.md)
 - [Payment conflict and chain recovery rules](docs/NETWORK_RESILIENCE.md)
@@ -39,7 +40,9 @@ python3 qlu/build.py build --jobs 2
 python3 qlu/build.py test --jobs 2
 python3 -m venv .local/recovery-venv
 .local/recovery-venv/bin/python -m pip install --require-hashes --only-binary=:all: -r qlu/recovery-requirements.txt
+.local/recovery-venv/bin/python -m pip install --require-hashes --only-binary=:all: --no-deps -r qlu/conformance-requirements.txt
 .local/recovery-venv/bin/python -m unittest discover -s qlu/tests -v
+.local/recovery-venv/bin/python qlu/conformance_smoke.py
 .local/recovery-venv/bin/python qlu/private_net.py smoke
 .local/recovery-venv/bin/python qlu/wallet_smoke.py
 .local/recovery-venv/bin/python qlu/wallet_app_smoke.py

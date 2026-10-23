@@ -7,6 +7,54 @@ AND Schnorr spending, encrypted working-wallet storage and recovery, and restore
 spending on four loopback nodes.
 Test coins have no value. Both laboratory networks are stopped after tests.
 
+## Independent hybrid payment checks — 2026-10-23
+
+The [independent conformance milestone](INDEPENDENT_CONFORMANCE.md) is implemented
+and passed locally. Separate Python ML-DSA-65 and BIP340 implementations agree
+with QLU's native key derivation, address, transaction encoding and authorization
+digests. Frozen public synthetic vectors exercise two inputs and both signature
+paths. Standalone preflight checks 19 official BIP340 cases, five NIST ML-DSA-65
+cases, vendor hashes, all 20 installed reference-package Python files and the
+selected SHAKE backend before starting nodes.
+
+**600 Python tests passed without skips** in both local isolated environments
+(Python 3.12.13 and 3.14.6), including 38 new checks. The live drill passed all
+seven checks on four fresh localhost `qludev` nodes: native signatures verified
+by the separate reference, an independently signed two-input payment confirmed
+by the nodes, and an independently verified native return payment confirmed by
+the nodes. All 14 negative variants were rejected through each node's admission,
+broadcast and directly submitted block validation. They cover altered recipients
+and values, both spent amounts, spent script, wrong network/context/input index,
+missing/corrupt signature components and substituted public keys. Valid payment
+confirmation followed invalid witnesses with the same transaction ID.
+
+Separate agent review found and closed three test reproducibility gaps: the live
+CLI now runs the primitive checks itself, records and validates installed reference
+bytes, and rejects an unexpected optional SHAKE backend. An initial development
+test confused a current NIST case ID with an older OpenSSL sample; the full pinned
+public-key comparison passed, and its additional digest assertion was corrected
+to that exact external source. The original failure log is retained. No
+production consensus, native signing, wallet, recovery or network-default change
+was needed. This review is not an independent specialist cryptographic audit.
+
+Local attempt `b2573a6ecc2048adaea97d265c1ec2c7` ran from
+`2026-10-23T06:59:00.080379Z` to `2026-10-23T06:59:17.856956Z`. Evidence is retained
+under ignored `.local/evidence/conformance-<attempt>.json` and
+`conformance-live-local.log`; full suite logs are `conformance-unit-python312.log`
+and `conformance-unit-python314.log`. The Git base was
+`ae9d011da58c41d1f2ae31a6e11f388c9f7c90ae` plus this milestone's fingerprinted
+sources. Source, binary and installed-reference hashes matched before and after.
+The frozen corpus SHA-256 is
+`978626cc766564711adba46eb5bb8ebdb84cc93dd78bd6a488f4d6bca2f42542`.
+All fixture nodes stopped, all eight private ports were free, and all four
+protected user vault/backup/history files retained their hashes. Exact-revision
+hosted Mac and Linux results are pending at this implementation commit.
+
+This is bounded interoperability evidence for private hybrid spending. The
+independent reference is test-only, is not constant time, and must never process
+real wallet keys. It does not establish an audited hybrid construction,
+side-channel resistance, public-network safety or Windows/phone acceptance.
+
 ## Repeated private payments and resource baseline — 2026-10-23
 
 The [fixed protocol workload](PAYMENT_WORKLOAD.md) passed **32 real transfers**
