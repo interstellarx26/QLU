@@ -59,8 +59,28 @@ production signing randomness. Evidence remains ignored under
 `.local/evidence/native-safety-<attempt>.json`; the final log is
 `native-safety-version-fixed-local.log`, and the full suite logs are
 `native-safety-unit-python312-final.log` and `native-safety-unit-python314-final.log`.
-Exact-revision hosted Mac and Linux results are pending at this implementation
-commit; all existing private-network drills remain required in both jobs.
+
+Hosted [run 40006504186](https://github.com/interstellarx26/QLU/actions/runs/40006504186)
+completed successfully on both `ubuntu-24.04` and `macos-15` at implementation
+revision **`0e2287d70021e71279d5747883722f8a4acbe0ba`**. Each platform passed the
+same native/helper counts and both deliberate-fault probes, all **625 Python
+tests without skips**, **154 executed core tests**, and **all 13 live private-network
+drills**. The Mac also passed **70 native wallet-model tests**. Each core suite
+explicitly skipped one optional external `script_assets_tests` corpus; it is
+not counted among the 154 executed tests. Both jobs' laboratory cleanup steps
+succeeded, and the final private-network evidence reported all eight ports free.
+
+Hosted native attempts were **`5d4fc84188d04bdc963c725513e937c6`** on Linux
+(Clang 18.1.3) and **`7dfb88f194a74200bb4f38e075c48865`** on Mac (Apple Clang 17).
+Both used OpenSSL 3.6.4 and matched the local helper input schedule hash above
+and source inventory hash
+`e0072ada6ecf63cbe334aab19075728fcaff80c27aca2c202d64295235df8f59`.
+The Linux dependency installation took almost ten minutes but succeeded without
+a retry; it was not a test failure. Completed job logs and the separate evidence
+review are preserved under ignored `.local/evidence/native-safety-hosted-*`.
+The four protected local wallet/backup/history files and normal node binary
+remained unchanged, and the local private ports were closed after verification.
+The subsequent result-recording commit changes documentation only.
 
 The linked OpenSSL provider and system libraries are not sanitizer-instrumented
 by this gate. Coverage-guided fuzzing, full-node/P2P parsing, concurrency, leak

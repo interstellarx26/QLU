@@ -1,7 +1,7 @@
 # Native cryptographic input safety
 
-Status: implemented and locally verified; exact-revision hosted results are
-recorded in [STATUS.md](STATUS.md).
+Status: implemented and verified on local Mac plus hosted Mac and Linux.
+Exact-revision results are recorded in [STATUS.md](STATUS.md).
 This gate exercises QLU's existing native hybrid verification and signing-helper
 input boundary. It changes no consensus rules, keys, recovery format, mining or
 public-network access. All fixtures are explicitly public synthetic test data.
